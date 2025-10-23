@@ -17,7 +17,7 @@ Additional background lives in the internal wiki: [Arkadium IT Knowledge Base](h
    pip install -e .
    ```
 
-3. Create (or import) the Azure AD application **Arkadium MS Teams Chats Archive Export** with delegated permissions `Chat.Read`, `Chat.ReadBasic`, and `Chat.ReadWrite`. You can import `azure/app-manifest.json` during registration to pre-populate the correct scope list; it already links to the internal Arkadium IT wiki so tenant admins see the documentation context.
+3. Create (or import) the Azure AD application **Arkadium MS Teams Chats Archive Export** with delegated permissions `Chat.Read` and `Chat.ReadBasic`. You can import `azure/app-manifest.json` during registration to pre-populate the correct scope list; it already links to the internal Arkadium IT wiki so tenant admins see the documentation context.
    - After creation, grant admin consent once so end users do not see repeated prompts.
    - Record the generated `Application (client) ID` and, if applicable, your tenant ID.
 4. Copy `config.sample.json` to `~/.teams-exporter/config.json` and update the placeholders:
