@@ -11,7 +11,13 @@ from .dates import DateParseError, resolve_range
 from .exporter import ChatNotFoundError, choose_chat, export_chat
 from .graph import GraphClient
 
-app = typer.Typer(add_completion=False, help="Export Microsoft Teams chats via Microsoft Graph.")
+app = typer.Typer(
+    add_completion=False,
+    help=(
+        "Export Microsoft Teams chats via Microsoft Graph. "
+        "Docs: https://arkadium.atlassian.net/wiki/spaces/IT/overview"
+    ),
+)
 
 
 def _chat_title(chat: dict) -> str:

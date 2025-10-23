@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" width="640" height="320">
+  <style>
+    .title { font: 24px sans-serif; font-weight: bold; }
+    .label { font: 16px sans-serif; }
+    .box { fill: #f4f6fb; stroke: #1f3c88; stroke-width: 2; rx: 8; ry: 8; }
+    .arrow { stroke: #1f3c88; stroke-width: 2; marker-end: url(#arrowhead); fill: none; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1f3c88" />
+    </marker>
+  </defs>
+  <text x="320" y="40" text-anchor="middle" class="title">Arkadium MS Teams Chats Archive Export Flow</text>
+  <rect class="box" x="40" y="100" width="180" height="100" />
+  <text x="130" y="150" text-anchor="middle" class="label">End User</text>
+  <text x="130" y="180" text-anchor="middle" class="label">CLI Login</text>
+  <rect class="box" x="240" y="100" width="180" height="100" />
+  <text x="330" y="150" text-anchor="middle" class="label">Teams Chats</text>
+  <text x="330" y="180" text-anchor="middle" class="label">Archive Export App</text>
+  <rect class="box" x="440" y="100" width="180" height="100" />
+  <text x="530" y="150" text-anchor="middle" class="label">Microsoft Graph</text>
+  <text x="530" y="180" text-anchor="middle" class="label">Delegated Access</text>
+  <path class="arrow" d="M220 150 H240" />
+  <path class="arrow" d="M420 150 H440" />
+  <text x="230" y="135" text-anchor="middle" class="label">Device Code</text>
+  <text x="430" y="135" text-anchor="middle" class="label">Chats</text>
+  <path class="arrow" d="M440 190 H420" />
+  <path class="arrow" d="M240 190 H220" />
+  <text x="430" y="205" text-anchor="middle" class="label">Messages</text>
+  <text x="230" y="205" text-anchor="middle" class="label">Export Files</text>
+</svg>
