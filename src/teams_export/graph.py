@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, Iterator, List
+from typing import Callable, Dict, Iterable, Iterator, List, Optional
 
 import requests
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 60
 
 
 class GraphError(RuntimeError):
@@ -24,7 +24,13 @@ class GraphClient:
         )
         self._base_url = base_url.rstrip("/")
 
-    def _paginate(self, url: str, params: Dict[str, str] | None = None) -> Iterator[dict]:
+    def _paginate(
+        self,
+        url: str,
+        params: Dict[str, str] | None = None,
+        *,
+        stop_condition: Optional[Callable[[dict], bool]] = None,
+    ) -> Iterator[dict]:
         while url:
             resp = self._session.get(url, params=params, timeout=DEFAULT_TIMEOUT)
             params = None  # Only include params on first request.
@@ -33,6 +39,8 @@ class GraphClient:
             payload = resp.json()
             for item in payload.get("value", []):
                 yield item
+                if stop_condition and stop_condition(item):
+                    return
             url = payload.get("@odata.nextLink")
 
     def _format_error(self, response: requests.Response) -> str:
@@ -50,22 +58,21 @@ class GraphClient:
     def list_chats(self) -> List[dict]:
         url = f"{self._base_url}/me/chats"
         params = {
-            "$expand": "members($select=displayName,email,userId)",
+            "$expand": "members",
         }
         return list(self._paginate(url, params=params))
 
     def list_chat_messages(
         self,
         chat_id: str,
-        start_iso: str,
-        end_iso: str,
+        *,
+        stop_condition: Optional[Callable[[dict], bool]] = None,
     ) -> List[dict]:
         url = f"{self._base_url}/me/chats/{chat_id}/messages"
         params = {
-            "$filter": f"lastModifiedDateTime ge {start_iso} and lastModifiedDateTime le {end_iso}",
-            "$orderby": "lastModifiedDateTime asc",
+            "$top": "50",
         }
-        return list(self._paginate(url, params=params))
+        return list(self._paginate(url, params=params, stop_condition=stop_condition))
 
     def close(self) -> None:
         self._session.close()

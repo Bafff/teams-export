@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
-from .dates import to_iso
+from dateutil import parser
+
 from .graph import GraphClient
 
 
@@ -44,12 +45,15 @@ def choose_chat(
     matches: List[dict] = []
 
     for chat in chats:
+        chat_type = chat.get("chatType")
         topic = chat.get("topic") or chat.get("displayName")
         chat_label = _normalise(topic)
         if name_norm and chat_label == name_norm:
             matches.append(chat)
             continue
         if participant_norm:
+            if chat_type and chat_type.lower() != "oneonone":
+                continue
             for label in _member_labels(chat):
                 if _normalise(label) == participant_norm:
                     matches.append(chat)
@@ -97,6 +101,21 @@ def _transform_message(message: dict) -> dict:
     return transformed
 
 
+def _within_range(message: dict, start_dt, end_dt) -> bool:
+    timestamp = (
+        message.get("lastModifiedDateTime")
+        or message.get("createdDateTime")
+        or message.get("originalArrivalDateTime")
+    )
+    if not timestamp:
+        return False
+    try:
+        dt_value = parser.isoparse(timestamp)
+    except (ValueError, TypeError):
+        return False
+    return start_dt <= dt_value <= end_dt
+
+
 def _write_json(messages: Sequence[dict], output_path: Path) -> None:
     payload = list(messages)
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -124,12 +143,6 @@ def export_chat(
     if not chat_id:
         raise ChatNotFoundError("Selected chat missing identifier.")
 
-    start_iso = to_iso(start_dt)
-    end_iso = to_iso(end_dt)
-
-    messages = [_transform_message(m) for m in client.list_chat_messages(chat_id, start_iso, end_iso)]
-    message_count = len(messages)
-
     identifier = chat.get("topic") or chat.get("displayName")
     if not identifier:
         members = _member_labels(chat)
@@ -142,6 +155,21 @@ def export_chat(
     else:
         date_fragment = f"{start_dt.date()}_{end_dt.date()}"
     output_path = output_dir / f"{filename_stem}_{date_fragment}.{suffix}"
+
+    def _stop_condition(message: dict) -> bool:
+        ts_value = message.get("createdDateTime") or message.get("lastModifiedDateTime")
+        if not ts_value:
+            return False
+        try:
+            dt_value = parser.isoparse(ts_value)
+        except (ValueError, TypeError):
+            return False
+        return dt_value < start_dt
+
+    raw_messages = client.list_chat_messages(chat_id, stop_condition=_stop_condition)
+    filtered_messages = [m for m in raw_messages if _within_range(m, start_dt, end_dt)]
+    messages = [_transform_message(m) for m in filtered_messages]
+    message_count = len(messages)
 
     if output_format.lower() == "json":
         _write_json(messages, output_path)
