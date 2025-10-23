@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teams-export"
+version = "0.1.0"
+description = "CLI to export Microsoft Teams chats via Microsoft Graph"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Teams Export" }
+]
+dependencies = [
+  "typer>=0.12",
+  "requests>=2.32",
+  "msal>=1.28",
+  "python-dateutil>=2.9"
+]
+
+[project.scripts]
+teams-export = "teams_export.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
