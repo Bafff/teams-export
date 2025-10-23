@@ -1,0 +1,31 @@
+{
+  "displayName": "Arkadium MS Teams Chats Archive Export",
+  "description": "Device-code CLI that lets end users export their own Microsoft Teams chats to local archives.",
+  "signInAudience": "AzureADMyOrg",
+  "info": {
+    "marketingUrl": "https://arkadium.atlassian.net/wiki/spaces/IT/overview"
+  },
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        { "id": "f501c180-9344-439a-bca0-6cbf209fd270", "type": "Scope" },
+        { "id": "9547fcb5-d03f-419d-9948-5928bbf71b0f", "type": "Scope" },
+        { "id": "9ff7295e-131b-4d94-90e1-69fde507ac11", "type": "Scope" }
+      ]
+    }
+  ],
+  "web": {
+    "redirectUris": [],
+    "implicitGrantSettings": {
+      "enableIdTokenIssuance": false,
+      "enableAccessTokenIssuance": false
+    }
+  },
+  "spa": {
+    "redirectUris": []
+  },
+  "publicClient": {
+    "redirectUris": ["https://login.microsoftonline.com/common/oauth2/nativeclient"]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "client_id": "00000000-0000-0000-0000-000000000000",
+  "authority": "https://login.microsoftonline.com/<your-tenant-id>",
+  "scopes": [
+    "Chat.Read",
+    "Chat.ReadBasic",
+    "Chat.ReadWrite"
+  ],
+  "token_cache_path": "~/.teams-exporter/token_cache.json"
+}
