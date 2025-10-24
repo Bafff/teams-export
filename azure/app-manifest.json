@@ -1,6 +1,7 @@
 {
   "displayName": "Arkadium MS Teams Chats Archive Export",
   "description": "Device-code CLI that lets end users export their own Microsoft Teams chats to local archives.",
+  "notes": "This application can be used to retrieve your history of the conversations from MS Teams using Graph API and Python.",
   "signInAudience": "AzureADMyOrg",
   "info": {
     "marketingUrl": "https://arkadium.atlassian.net/wiki/spaces/IT/overview"
@@ -15,6 +16,7 @@
     }
   ],
   "web": {
+    "homePageUrl": "https://arkadium.atlassian.net/wiki/spaces/IT/overview",
     "redirectUris": [],
     "implicitGrantSettings": {
       "enableIdTokenIssuance": false,
