@@ -137,24 +137,47 @@ def _write_csv(messages: Sequence[dict], output_path: Path) -> None:
             writer.writerow({key: message.get(key) for key in fieldnames})
 
 
-def _download_attachment(client: GraphClient, url: str, output_path: Path) -> bool:
+def _get_extension_from_mime(mime_type: str) -> str:
+    """Get file extension from MIME type."""
+    mime_to_ext = {
+        'image/png': '.png',
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/gif': '.gif',
+        'image/bmp': '.bmp',
+        'image/webp': '.webp',
+        'image/svg+xml': '.svg',
+        'image/tiff': '.tiff',
+        'application/pdf': '.pdf',
+        'application/zip': '.zip',
+        'application/x-zip-compressed': '.zip',
+        'text/plain': '.txt',
+        'application/json': '.json',
+        'application/xml': '.xml',
+        'text/html': '.html',
+    }
+    return mime_to_ext.get(mime_type.lower(), '.bin')
+
+
+def _download_attachment(client: GraphClient, url: str, output_path: Path) -> tuple[bool, str | None]:
     """Download an attachment from a URL to local file.
 
     Returns:
-        True if download succeeded, False otherwise
+        Tuple of (success: bool, content_type: str | None)
     """
     try:
         # Use the authenticated session from GraphClient
         response = client._session.get(url, timeout=30)
         if response.status_code == 200:
             output_path.write_bytes(response.content)
-            return True
+            content_type = response.headers.get('Content-Type', '').split(';')[0].strip()
+            return True, content_type
         else:
             print(f"Failed to download {url}: HTTP {response.status_code}")
-            return False
+            return False, None
     except Exception as e:
         print(f"Error downloading {url}: {e}")
-        return False
+        return False, None
 
 
 def _extract_image_urls(messages: Sequence[dict]) -> List[str]:
@@ -225,43 +248,60 @@ def _download_attachments(
     print(f"\nDownloading {len(unique_urls)} image(s)...")
 
     for idx, url in enumerate(unique_urls, 1):
-        # Generate filename from URL or use index
+        # Generate base filename (without extension) from URL or use index
         try:
             parsed = urlparse(url)
             path_parts = parsed.path.split('/')
             # Try to get a meaningful name from the URL
-            if path_parts:
-                filename = path_parts[-1] or f"image_{idx:03d}"
+            if path_parts and path_parts[-1]:
+                base_filename = path_parts[-1]
+                # Remove extension if present, we'll add correct one later
+                if '.' in base_filename:
+                    base_filename = base_filename.rsplit('.', 1)[0]
             else:
-                filename = f"image_{idx:03d}"
-
-            # If no extension, try to guess from URL or default to .png
-            if '.' not in filename:
-                if 'image' in url.lower():
-                    filename += '.png'
-                else:
-                    filename += '.bin'
+                base_filename = f"image_{idx:03d}"
         except Exception:
-            filename = f"image_{idx:03d}.png"
+            base_filename = f"image_{idx:03d}"
 
-        # Sanitize filename
-        filename = re.sub(r'[^\w\-.]', '_', filename)
-        output_path = attachments_dir / filename
+        # Sanitize base filename
+        base_filename = re.sub(r'[^\w\-]', '_', base_filename)
 
-        # Avoid overwriting if file already exists
-        counter = 1
-        while output_path.exists():
-            name_part = filename.rsplit('.', 1)[0]
-            ext_part = '.' + filename.rsplit('.', 1)[1] if '.' in filename else ''
-            output_path = attachments_dir / f"{name_part}_{counter}{ext_part}"
-            counter += 1
+        # Download to temporary path first to get Content-Type
+        temp_filename = f"{base_filename}_temp"
+        temp_path = attachments_dir / temp_filename
 
-        if _download_attachment(client, url, output_path):
+        success, content_type = _download_attachment(client, url, temp_path)
+
+        if success:
+            # Determine correct extension from Content-Type
+            if content_type:
+                extension = _get_extension_from_mime(content_type)
+            else:
+                # Fallback to .png for images
+                extension = '.png'
+
+            # Create final filename with correct extension
+            final_filename = f"{base_filename}{extension}"
+            final_path = attachments_dir / final_filename
+
+            # Avoid overwriting if file already exists
+            counter = 1
+            while final_path.exists():
+                final_filename = f"{base_filename}_{counter}{extension}"
+                final_path = attachments_dir / final_filename
+                counter += 1
+
+            # Rename from temp to final name
+            temp_path.rename(final_path)
+
             # Store relative path (relative to the markdown file)
-            relative_path = f"{attachments_dir.name}/{output_path.name}"
+            relative_path = f"{attachments_dir.name}/{final_path.name}"
             url_mapping[url] = relative_path
-            print(f"  [{idx}/{len(unique_urls)}] Downloaded: {output_path.name}")
+            print(f"  [{idx}/{len(unique_urls)}] Downloaded: {final_path.name}")
         else:
+            # Clean up temp file if exists
+            if temp_path.exists():
+                temp_path.unlink()
             print(f"  [{idx}/{len(unique_urls)}] Failed: {url}")
 
     return url_mapping
