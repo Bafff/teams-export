@@ -8,6 +8,7 @@ from typing import Iterable
 import typer
 
 from .auth import AuthError, acquire_token
+from .cache import ChatCache
 from .config import ConfigError, load_config
 from .dates import DateParseError, resolve_range
 from .exporter import ChatNotFoundError, choose_chat, export_chat
@@ -104,6 +105,11 @@ def main(
         "--force-login",
         help="Skip cache and refresh the device login flow.",
     ),
+    refresh_cache: bool = typer.Option(
+        False,
+        "--refresh-cache",
+        help="Force refresh of chat list cache.",
+    ),
 ) -> None:
     try:
         config = load_config()
@@ -126,19 +132,34 @@ def main(
         raise typer.Exit(code=3)
 
     with GraphClient(token) as client:
-        # Progress callback for chat loading
-        def show_progress(count: int) -> None:
-            sys.stdout.write(f"\rLoading chats... {count} loaded")
-            sys.stdout.flush()
+        # Try to load from cache first
+        cache = ChatCache()
+        user_id = "me"  # Simple identifier for caching
+        chats = None
 
-        typer.echo("Loading chats...")
-        chats = client.list_chats(limit=None, progress_callback=show_progress)
+        if not refresh_cache:
+            chats = cache.get(user_id)
+            if chats:
+                typer.secho(f"✓ Loaded {len(chats)} chats from cache (5-min TTL)", fg=typer.colors.CYAN)
 
-        # Clear progress line
-        if chats:
-            sys.stdout.write("\r" + " " * 50 + "\r")
-            sys.stdout.flush()
-            typer.secho(f"✓ Loaded {len(chats)} chats", fg=typer.colors.GREEN)
+        # If no cache or refresh requested, load from API
+        if chats is None:
+            # Progress callback for chat loading
+            def show_progress(count: int) -> None:
+                sys.stdout.write(f"\rLoading chats... {count} loaded")
+                sys.stdout.flush()
+
+            typer.echo("Loading chats from Microsoft Graph...")
+            chats = client.list_chats(limit=None, progress_callback=show_progress)
+
+            # Clear progress line
+            if chats:
+                sys.stdout.write("\r" + " " * 50 + "\r")
+                sys.stdout.flush()
+                typer.secho(f"✓ Loaded {len(chats)} chats", fg=typer.colors.GREEN)
+
+                # Save to cache for next time
+                cache.set(user_id, chats)
 
         if list_chats:
             typer.echo("\nChat ID\tType\tTitle\tParticipants")

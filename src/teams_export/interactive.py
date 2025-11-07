@@ -120,7 +120,7 @@ def select_chat_interactive(
     while True:
         try:
             selection = typer.prompt(
-                f"\nEnter chat number (1-{len(display_chats)}) or 'q' to quit",
+                f"\nEnter chat number (1-{len(display_chats)}), 's' to search, or 'q' to quit",
                 default="",
             )
 
@@ -129,6 +129,48 @@ def select_chat_interactive(
                 raise typer.Abort()
 
             if not selection:
+                continue
+
+            # Search mode
+            if selection.lower() in ("s", "search"):
+                search_query = typer.prompt("\nEnter search term (chat name or participant)")
+                if not search_query:
+                    continue
+
+                # Search in all chats, not just displayed ones
+                search_results = filter_chats_by_query(sorted_chats, search_query)
+
+                if not search_results:
+                    typer.secho(f"No chats found matching '{search_query}'", fg=typer.colors.YELLOW)
+                    continue
+
+                if len(search_results) == 1:
+                    selected_chat = search_results[0]
+                    selected_name = _chat_display_name(selected_chat)
+                    typer.secho(f"✓ Found and selected: {selected_name}", fg=typer.colors.GREEN)
+                    return selected_chat
+
+                # Show search results
+                typer.echo(f"\nFound {len(search_results)} matching chats:")
+                typer.echo("-" * 80)
+                for idx, chat in enumerate(search_results[:20], 1):
+                    name = _chat_display_name(chat)
+                    if len(name) > 60:
+                        name = name[:57] + "..."
+                    typer.echo(f"{idx:<4} {name}")
+
+                if len(search_results) > 20:
+                    typer.echo(f"... and {len(search_results) - 20} more matches")
+                typer.echo("-" * 80)
+
+                result_selection = typer.prompt(f"Enter number (1-{min(20, len(search_results))})", default="")
+                if result_selection.isdigit():
+                    result_idx = int(result_selection)
+                    if 1 <= result_idx <= min(20, len(search_results)):
+                        selected_chat = search_results[result_idx - 1]
+                        selected_name = _chat_display_name(selected_chat)
+                        typer.secho(f"\n✓ Selected: {selected_name}", fg=typer.colors.GREEN)
+                        return selected_chat
                 continue
 
             choice = int(selection)
@@ -143,7 +185,7 @@ def select_chat_interactive(
                     fg=typer.colors.YELLOW,
                 )
         except ValueError:
-            typer.secho("Invalid input. Please enter a number.", fg=typer.colors.YELLOW)
+            typer.secho("Invalid input. Please enter a number or 's' to search.", fg=typer.colors.YELLOW)
         except (KeyboardInterrupt, EOFError):
             typer.echo("\nSelection cancelled.")
             raise typer.Abort()
