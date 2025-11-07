@@ -62,14 +62,6 @@ def _format_jira_message(message: dict, index: int) -> str:
 
     content = _strip_html(message.get("content"))
 
-    # Handle empty content
-    if not content:
-        content_type = message.get("type", "")
-        if content_type == "systemEventMessage":
-            content = "[System event]"
-        else:
-            content = "[No content]"
-
     # Format attachments if present
     attachments = message.get("attachments", [])
     attachment_lines = []
@@ -78,8 +70,14 @@ def _format_jira_message(message: dict, index: int) -> str:
             name = att.get("name") or "Attachment"
             content_type = att.get("contentType", "")
 
-            # Try to get URL from different possible fields
-            url = att.get("contentUrl") or att.get("content") or att.get("url")
+            # Try to get URL from different possible fields (in order of preference)
+            url = (
+                att.get("contentUrl") or
+                att.get("content") or
+                att.get("url") or
+                att.get("thumbnailUrl") or
+                (att.get("hostedContents", {}).get("contentUrl") if isinstance(att.get("hostedContents"), dict) else None)
+            )
 
             # Check if it's an image
             is_image = (
@@ -94,8 +92,17 @@ def _format_jira_message(message: dict, index: int) -> str:
                 # Format as markdown link
                 attachment_lines.append(f"📎 [{name}]({url})")
             else:
-                # Just show the name
-                attachment_lines.append(f"📎 {name}")
+                # Just show the name if no URL found
+                attachment_lines.append(f"📎 {name} (no URL)")
+
+    # Handle empty content
+    if not content:
+        content_type = message.get("type", "")
+        if content_type == "systemEventMessage":
+            content = "[System event]"
+        elif not attachment_lines:
+            # Only show "[No content]" if there are no attachments either
+            content = "[No content]"
 
     # Format reactions if present
     reactions = message.get("reactions", [])
@@ -110,17 +117,20 @@ def _format_jira_message(message: dict, index: int) -> str:
             reaction_text = f" [{', '.join(reaction_emojis)}]"
 
     # Build the message block in standard Markdown format
-    # Format content as blockquote (add '> ' prefix to each line)
-    content_lines = content.split('\n')
-    quoted_content = '\n'.join(f"> {line}" if line else ">" for line in content_lines)
-
     lines = [
         f"**{sender}** — *{timestamp_clean}*{reaction_text}",
         "",
-        quoted_content,
-        "",
     ]
 
+    # Add content if present
+    if content:
+        # Format content as blockquote (add '> ' prefix to each line)
+        content_lines = content.split('\n')
+        quoted_content = '\n'.join(f"> {line}" if line else ">" for line in content_lines)
+        lines.append(quoted_content)
+        lines.append("")
+
+    # Add attachments if present
     if attachment_lines:
         lines.extend(attachment_lines)
         lines.append("")
