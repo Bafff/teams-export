@@ -662,9 +662,20 @@ def write_docx(
 
     # Add each message
     for idx, message in enumerate(messages, 1):
-        sender = message.get("from", {}).get("displayName") or "Unknown"
-        timestamp = message.get("createdDateTime", "")
-        timestamp_clean = timestamp.replace("T", " ").replace("Z", " UTC") if timestamp else "Unknown time"
+        sender = message.get("sender") or "Unknown"
+        timestamp = message.get("timestamp", "")
+
+        # Format timestamp to be more readable
+        if timestamp:
+            try:
+                # Format: 2025-10-23T14:30:45.123Z -> 2025-10-23 14:30
+                timestamp_clean = timestamp.split('.')[0].replace('T', ' ')
+                if 'Z' in timestamp:
+                    timestamp_clean = timestamp_clean.replace('Z', ' UTC')
+            except Exception:
+                timestamp_clean = timestamp
+        else:
+            timestamp_clean = "No timestamp"
 
         # Message header (sender and timestamp)
         p = doc.add_paragraph()
@@ -690,14 +701,13 @@ def write_docx(
                 reaction_run.font.color.rgb = RGBColor(102, 102, 102)
 
         # Message content
-        content = message.get("body", {}).get("content", "")
-        text_content = _strip_html(content)
+        html_content = message.get("content", "")
+        text_content = _strip_html(html_content)
         if text_content:
             p = doc.add_paragraph(text_content)
             p.paragraph_format.left_indent = Inches(0.3)
 
         # Extract and add inline images
-        html_content = message.get("body", {}).get("content", "")
         inline_images = _extract_images_from_html(html_content)
 
         for img in inline_images:
