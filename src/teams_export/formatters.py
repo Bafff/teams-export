@@ -74,8 +74,14 @@ def _strip_html(content: str | None) -> str:
     return text
 
 
-def _format_jira_message(message: dict, index: int) -> str:
-    """Format a single message in standard Markdown."""
+def _format_jira_message(message: dict, index: int, url_mapping: dict[str, str] | None = None) -> str:
+    """Format a single message in standard Markdown.
+
+    Args:
+        message: Message dictionary
+        index: Message index
+        url_mapping: Optional mapping of remote URL to local file path
+    """
     sender = message.get("sender") or "Unknown"
     timestamp = message.get("timestamp", "")
 
@@ -108,7 +114,9 @@ def _format_jira_message(message: dict, index: int) -> str:
         src = img.get("src", "")
         alt = img.get("alt", "image")
         if src:
-            attachment_lines.append(f"![{alt}]({src})")
+            # Use local path if available, otherwise use remote URL
+            display_url = url_mapping.get(src, src) if url_mapping else src
+            attachment_lines.append(f"![{alt}]({display_url})")
 
     # Then add file attachments
     if attachments:
@@ -132,11 +140,15 @@ def _format_jira_message(message: dict, index: int) -> str:
             )
 
             if is_image and url:
+                # Use local path if available, otherwise use remote URL
+                display_url = url_mapping.get(url, url) if url_mapping else url
                 # Format as markdown image
-                attachment_lines.append(f"![{name}]({url})")
+                attachment_lines.append(f"![{name}]({display_url})")
             elif url:
+                # Use local path if available, otherwise use remote URL
+                display_url = url_mapping.get(url, url) if url_mapping else url
                 # Format as markdown link
-                attachment_lines.append(f"📎 [{name}]({url})")
+                attachment_lines.append(f"📎 [{name}]({display_url})")
             else:
                 # Just show the name if no URL found
                 attachment_lines.append(f"📎 {name} (no URL)")
@@ -184,8 +196,20 @@ def _format_jira_message(message: dict, index: int) -> str:
     return "\n".join(lines)
 
 
-def write_jira_markdown(messages: Sequence[dict], output_path: Path, chat_info: dict | None = None) -> None:
-    """Write messages in standard Markdown format (works in Jira, GitHub, and other platforms)."""
+def write_jira_markdown(
+    messages: Sequence[dict],
+    output_path: Path,
+    chat_info: dict | None = None,
+    url_mapping: dict[str, str] | None = None,
+) -> None:
+    """Write messages in standard Markdown format (works in Jira, GitHub, and other platforms).
+
+    Args:
+        messages: List of message dictionaries
+        output_path: Path to write markdown file
+        chat_info: Optional chat metadata (title, participants, date range)
+        url_mapping: Optional mapping of remote URLs to local file paths
+    """
 
     lines = []
 
@@ -211,7 +235,7 @@ def write_jira_markdown(messages: Sequence[dict], output_path: Path, chat_info: 
         lines.append("")
 
         for idx, message in enumerate(messages, 1):
-            lines.append(_format_jira_message(message, idx))
+            lines.append(_format_jira_message(message, idx, url_mapping=url_mapping))
             # No extra empty line needed - _format_jira_message adds it
     else:
         lines.append("*No messages found in the specified date range.*")

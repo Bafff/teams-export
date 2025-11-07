@@ -188,6 +188,11 @@ def main(
         "--refresh-cache",
         help="Force refresh of chat list cache.",
     ),
+    download_attachments: bool = typer.Option(
+        True,
+        "--download-attachments/--no-download-attachments",
+        help="Download images and attachments locally (default: enabled).",
+    ),
 ) -> None:
     try:
         config = load_config()
@@ -321,6 +326,7 @@ def main(
                         end_dt,
                         output_dir=output_dir,
                         output_format=output_format,
+                        download_attachments=download_attachments,
                     )
                     return (title, output_path, count, None)
                 except Exception as exc:
@@ -357,6 +363,7 @@ def main(
                         end_dt,
                         output_dir=output_dir,
                         output_format=output_format,
+                        download_attachments=download_attachments,
                     )
                 except ValueError as exc:
                     typer.secho(str(exc), fg=typer.colors.RED)
