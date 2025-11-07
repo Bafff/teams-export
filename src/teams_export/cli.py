@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable
@@ -119,16 +120,35 @@ def main(
     typer.echo("Authenticating with Microsoft Graph…")
     try:
         token = acquire_token(config, message_callback=typer.echo, force_refresh=force_login)
+        typer.secho("✓ Authenticated successfully", fg=typer.colors.GREEN)
     except AuthError as exc:
         typer.secho(f"Authentication failed: {exc}", fg=typer.colors.RED)
         raise typer.Exit(code=3)
 
     with GraphClient(token) as client:
-        chats = client.list_chats()
+        # Progress callback for chat loading
+        def show_progress(count: int) -> None:
+            sys.stdout.write(f"\rLoading chats... {count} loaded")
+            sys.stdout.flush()
+
+        typer.echo("Loading chats...")
+        chats = client.list_chats(limit=None, progress_callback=show_progress)
+
+        # Clear progress line
+        if chats:
+            sys.stdout.write("\r" + " " * 50 + "\r")
+            sys.stdout.flush()
+            typer.secho(f"✓ Loaded {len(chats)} chats", fg=typer.colors.GREEN)
+
         if list_chats:
-            typer.echo("Chat ID\tType\tTitle\tParticipants")
+            typer.echo("\nChat ID\tType\tTitle\tParticipants")
             _print_chat_list(chats)
             raise typer.Exit()
+
+        # Check if we found any chats
+        if not chats:
+            typer.secho("No chats found.", fg=typer.colors.YELLOW)
+            raise typer.Exit(code=0)
 
         exports: list[tuple[str, Path, int]] = []
 
@@ -141,6 +161,7 @@ def main(
                     chat = select_chat_interactive(
                         chats,
                         prompt_message="Select a chat to export:",
+                        showing_limited=False,
                     )
                     selected_chats = [chat]
                 except typer.Abort:

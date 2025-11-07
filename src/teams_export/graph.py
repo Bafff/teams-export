@@ -87,7 +87,19 @@ class GraphClient:
         params: Dict[str, str] | None = None,
         *,
         stop_condition: Optional[Callable[[dict], bool]] = None,
+        progress_callback: Optional[Callable[[int], None]] = None,
+        max_items: Optional[int] = None,
     ) -> Iterator[dict]:
+        """Paginate through API results with optional progress tracking and limits.
+
+        Args:
+            url: API endpoint URL
+            params: Query parameters for first request
+            stop_condition: Function that returns True to stop iteration
+            progress_callback: Called with count after each page is fetched
+            max_items: Maximum number of items to fetch (None = unlimited)
+        """
+        count = 0
         while url:
             resp = self._request_with_retry(url, params=params)
             params = None  # Only include params on first request.
@@ -96,8 +108,15 @@ class GraphClient:
             payload = resp.json()
             for item in payload.get("value", []):
                 yield item
+                count += 1
                 if stop_condition and stop_condition(item):
                     return
+                if max_items and count >= max_items:
+                    return
+
+            if progress_callback:
+                progress_callback(count)
+
             url = payload.get("@odata.nextLink")
 
     def _format_error(self, response: requests.Response) -> str:
@@ -112,12 +131,32 @@ class GraphClient:
             return f"Graph API error {code or response.status_code}: {message}"
         return f"Graph API error {response.status_code}: {base}"
 
-    def list_chats(self) -> List[dict]:
+    def list_chats(
+        self,
+        *,
+        limit: Optional[int] = None,
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> List[dict]:
+        """List accessible chats with optional limit and progress tracking.
+
+        Args:
+            limit: Maximum number of chats to fetch (None = all chats)
+            progress_callback: Function called with count after each page
+
+        Returns:
+            List of chat objects with expanded members
+        """
         url = f"{self._base_url}/me/chats"
         params = {
             "$expand": "members",
+            "$top": "50",  # Fetch 50 chats per request
         }
-        return list(self._paginate(url, params=params))
+        return list(self._paginate(
+            url,
+            params=params,
+            max_items=limit,
+            progress_callback=progress_callback,
+        ))
 
     def list_chat_messages(
         self,

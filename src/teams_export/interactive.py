@@ -49,6 +49,7 @@ def select_chat_interactive(
     *,
     prompt_message: str = "Select a chat:",
     show_limit: int = 20,
+    showing_limited: bool = False,
 ) -> dict:
     """Present an interactive menu to choose from multiple chats.
 
@@ -56,6 +57,7 @@ def select_chat_interactive(
         chats: List of chat objects to choose from
         prompt_message: Message to display before the menu
         show_limit: Maximum number of chats to show initially
+        showing_limited: Whether we're showing a limited subset of all chats
 
     Returns:
         Selected chat object
@@ -78,6 +80,11 @@ def select_chat_interactive(
     display_chats = sorted_chats[:show_limit]
 
     typer.echo(f"\n{prompt_message}")
+    if showing_limited:
+        typer.secho(
+            "(Showing limited subset. Use --user/--chat to search for specific chats)",
+            fg=typer.colors.CYAN,
+        )
     typer.echo("=" * 80)
     typer.echo(f"{'#':<4} {'Type':<8} {'Chat Name':<50} {'Last Updated':<20}")
     typer.echo("-" * 80)
