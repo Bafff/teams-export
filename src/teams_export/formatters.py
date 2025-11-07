@@ -8,6 +8,35 @@ from typing import Sequence
 from pathlib import Path
 
 
+def _extract_images_from_html(content: str | None) -> list[dict]:
+    """Extract inline images from HTML content.
+
+    Returns list of dicts with 'src' and 'alt' keys.
+    """
+    if not content:
+        return []
+
+    images = []
+    # Find all <img> tags and extract src and alt attributes
+    img_pattern = r'<img[^>]+src=["\']([^"\']+)["\'][^>]*>'
+    for match in re.finditer(img_pattern, content, flags=re.IGNORECASE):
+        img_tag = match.group(0)
+        src = match.group(1)
+
+        # Try to extract alt text
+        alt_match = re.search(r'alt=["\']([^"\']*)["\']', img_tag, flags=re.IGNORECASE)
+        alt = alt_match.group(1) if alt_match else "image"
+
+        # Try to extract itemid for better name
+        itemid_match = re.search(r'itemid=["\']([^"\']+)["\']', img_tag, flags=re.IGNORECASE)
+        if itemid_match and itemid_match.group(1):
+            alt = itemid_match.group(1)
+
+        images.append({"src": src, "alt": alt})
+
+    return images
+
+
 def _strip_html(content: str | None) -> str:
     """Remove HTML tags and decode entities to plain text."""
     if not content:
@@ -15,6 +44,9 @@ def _strip_html(content: str | None) -> str:
 
     # Decode HTML entities first
     text = html.unescape(content)
+
+    # Remove <img> tags (they are extracted separately)
+    text = re.sub(r'<img[^>]+>', '', text, flags=re.IGNORECASE)
 
     # Replace common HTML elements with markdown equivalents
     text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
@@ -60,11 +92,25 @@ def _format_jira_message(message: dict, index: int) -> str:
     else:
         timestamp_clean = "No timestamp"
 
-    content = _strip_html(message.get("content"))
+    # Extract inline images from HTML content first
+    html_content = message.get("content", "")
+    inline_images = _extract_images_from_html(html_content)
+
+    # Then strip HTML to get text content
+    content = _strip_html(html_content)
 
     # Format attachments if present
     attachments = message.get("attachments", [])
     attachment_lines = []
+
+    # Add inline images first
+    for img in inline_images:
+        src = img.get("src", "")
+        alt = img.get("alt", "image")
+        if src:
+            attachment_lines.append(f"![{alt}]({src})")
+
+    # Then add file attachments
     if attachments:
         for att in attachments:
             name = att.get("name") or "Attachment"
