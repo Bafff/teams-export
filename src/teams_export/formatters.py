@@ -279,12 +279,13 @@ def _image_to_base64(image_path: Path) -> str | None:
         return None
 
 
-def _format_html_message(message: dict, index: int, base_dir: Path | None = None) -> str:
+def _format_html_message(message: dict, index: int, url_mapping: dict[str, str] | None = None, base_dir: Path | None = None) -> str:
     """Format a single message as HTML with embedded images.
 
     Args:
         message: Message dictionary
         index: Message index
+        url_mapping: Mapping of remote URLs to local file paths
         base_dir: Base directory for resolving relative image paths
     """
     sender = message.get("sender") or "Unknown"
@@ -323,10 +324,13 @@ def _format_html_message(message: dict, index: int, base_dir: Path | None = None
         src = img.get("src", "")
         alt = img.get("alt", "image")
         if src:
-            # If it's a local path and base_dir is provided, convert to base64
-            if not src.startswith("http") and base_dir:
+            # Try to get local path from url_mapping
+            local_path = url_mapping.get(src) if url_mapping else None
+
+            if local_path and base_dir:
+                # Convert local file to base64
                 try:
-                    img_path = base_dir / src
+                    img_path = base_dir / local_path
                     if img_path.exists():
                         data_url = _image_to_base64(img_path)
                         if data_url:
@@ -356,20 +360,26 @@ def _format_html_message(message: dict, index: int, base_dir: Path | None = None
             )
 
             if is_image and url:
-                # Convert to base64 if it's a local path
-                if not url.startswith("http") and base_dir:
+                # Try to get local path from url_mapping
+                local_path = url_mapping.get(url) if url_mapping else None
+
+                if local_path and base_dir:
+                    # Convert local file to base64
                     try:
-                        img_path = base_dir / url
+                        img_path = base_dir / local_path
                         if img_path.exists():
                             data_url = _image_to_base64(img_path)
                             if data_url:
                                 url = data_url
                     except Exception:
-                        pass
+                        pass  # Keep original URL if conversion fails
 
                 attachment_html.append(f'<img src="{html.escape(url)}" alt="{html.escape(name)}" style="max-width: 100%; height: auto; margin: 10px 0;">')
             elif url:
-                attachment_html.append(f'<p>📎 <a href="{html.escape(url)}">{html.escape(name)}</a></p>')
+                # Try to get local path from url_mapping for non-image attachments
+                local_path = url_mapping.get(url) if url_mapping else None
+                display_url = local_path if local_path else url
+                attachment_html.append(f'<p>📎 <a href="{html.escape(display_url)}">{html.escape(name)}</a></p>')
             else:
                 attachment_html.append(f'<p>📎 {html.escape(name)} (no URL)</p>')
 
@@ -416,7 +426,7 @@ def write_html(
     messages: Sequence[dict],
     output_path: Path,
     chat_info: dict | None = None,
-    attachments_dir: Path | None = None,
+    url_mapping: dict[str, str] | None = None,
 ) -> None:
     """Write messages as HTML with embedded base64 images.
 
@@ -430,7 +440,7 @@ def write_html(
         messages: List of message dictionaries
         output_path: Path to write HTML file
         chat_info: Optional chat metadata (title, participants, date range)
-        attachments_dir: Directory containing attachment files (for base64 conversion)
+        url_mapping: Optional mapping of remote URLs to local file paths
     """
     html_parts = [
         '<!DOCTYPE html>',
@@ -477,7 +487,7 @@ def write_html(
         html_parts.append(f'<h3>Messages ({len(messages)} total)</h3>')
 
         for idx, message in enumerate(messages, 1):
-            html_parts.append(_format_html_message(message, idx, base_dir=output_path.parent))
+            html_parts.append(_format_html_message(message, idx, url_mapping=url_mapping, base_dir=output_path.parent))
     else:
         html_parts.append('<p><em>No messages found in the specified date range.</em></p>')
 

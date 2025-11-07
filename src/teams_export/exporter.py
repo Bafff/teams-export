@@ -397,7 +397,7 @@ def export_chat(
             "participants": ", ".join(participants_list) if participants_list else "N/A",
             "date_range": f"{start_dt.date()} to {end_dt.date()}",
         }
-        write_html(messages, output_path, chat_info=chat_info, attachments_dir=attachments_dir)
+        write_html(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
     else:
         raise ValueError("Unsupported export format. Choose json, csv, jira, or html.")
 
