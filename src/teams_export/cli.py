@@ -160,7 +160,7 @@ def main(
         "--format",
         "-o",
         case_sensitive=False,
-        help="Export format: jira (Jira-friendly markdown), json, or csv.",
+        help="Export format: jira (markdown), html (copy-paste to Jira/Confluence), json, or csv.",
     ),
     output_dir: Path = typer.Option(
         Path("exports"),

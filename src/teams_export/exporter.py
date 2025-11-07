@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from dateutil import parser
 
 from .graph import GraphClient
-from .formatters import write_jira_markdown
+from .formatters import write_jira_markdown, write_html
 
 
 class ChatNotFoundError(RuntimeError):
@@ -333,6 +333,8 @@ def export_chat(
     if fmt in ("jira", "jira-markdown", "markdown"):
         suffix = "md"
         fmt = "jira"
+    elif fmt == "html":
+        suffix = "html"
     else:
         suffix = fmt
 
@@ -365,7 +367,8 @@ def export_chat(
 
     # Download attachments if requested (only for formats that support it)
     url_mapping = {}
-    if download_attachments and fmt == "jira" and messages:
+    attachments_dir = None
+    if download_attachments and fmt in ("jira", "html") and messages:
         # Create attachments directory next to output file
         attachments_dir_name = output_path.stem + "_files"
         attachments_dir = output_path.parent / attachments_dir_name
@@ -385,7 +388,17 @@ def export_chat(
             "date_range": f"{start_dt.date()} to {end_dt.date()}",
         }
         write_jira_markdown(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
+    elif fmt == "html":
+        # Prepare chat metadata for HTML formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_html(messages, output_path, chat_info=chat_info, attachments_dir=attachments_dir)
     else:
-        raise ValueError("Unsupported export format. Choose json, csv, or jira.")
+        raise ValueError("Unsupported export format. Choose json, csv, jira, or html.")
 
     return output_path, message_count
