@@ -250,11 +250,11 @@ def main(
 
         # Set default date range if not provided (for --all and --user/--chat modes)
         if start_dt is None and (export_all or participant or chat_name):
-            # Default to last year if dates not specified
+            # Default to last 24 hours (today) if dates not specified
             now = datetime.now().astimezone()
-            start_dt = now - timedelta(days=365)
+            start_dt = now - timedelta(hours=24)
             end_dt = now
-            typer.echo(f"Using default date range: {start_dt.date()} to {end_dt.date()}")
+            typer.echo(f"Using default date range: last 24 hours ({start_dt.date()} to {end_dt.date()})")
 
         if export_all:
             selected_chats = chats
