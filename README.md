@@ -74,7 +74,7 @@ teams-export --user "john.smith@company.com" --from "last week" --to "today"
 ### Export in Different Formats
 
 ```bash
-# Jira-friendly markdown (default) - perfect for copying into Jira tickets
+# Markdown (default) - works in Jira, GitHub, Confluence, etc.
 teams-export --user "john.smith@company.com" --format jira
 
 # JSON for programmatic processing
@@ -83,6 +83,12 @@ teams-export --user "john.smith@company.com" --format json
 # CSV for spreadsheet analysis
 teams-export --user "john.smith@company.com" --format csv
 ```
+
+The default Markdown format includes:
+- Standard Markdown syntax (compatible with Jira, GitHub, Confluence)
+- Clickable links for attachments
+- Inline image rendering for shared images
+- Message quotes and formatting preserved
 
 ### Other Options
 
@@ -114,7 +120,7 @@ teams-export --list
 teams-export --user "jane.doe@company.com"
 ```
 
-Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.txt` (for Jira format) or `john_smith_2025-10-23.json`.
+Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.md` (for Markdown/Jira format) or `john_smith_2025-10-23.json`.
 
 ## Caching
 
@@ -155,10 +161,13 @@ This is why the initial load fetches all chats (with progress indication) rather
 ### User Experience Improvements
 - **Interactive chat selection**: Beautiful menu with chat names, types, and last activity
 - **Multiple match handling**: If search finds multiple chats, shows menu instead of error
-- **Jira-ready format**: New default format perfect for pasting into Jira tickets
+- **Markdown format**: Standard Markdown output that works in Jira, GitHub, Confluence, and other platforms
   - Clean HTML conversion (removes tags, preserves formatting)
-  - Quote blocks for easy reading
-  - Attachment and reaction indicators
+  - Blockquote formatting (`>`) for message content
+  - Standard Markdown headers (`##`, `###`) and emphasis (`**bold**`, `*italic*`)
+  - Attachment support with clickable links
+  - **Image support**: Images from chat attachments rendered as `![name](url)`
+  - Reaction indicators
   - Proper timestamp formatting
 - **Smart defaults**: Defaults to today's date if not specified
 - **Progress tracking**: Shows real-time progress for multi-chat exports

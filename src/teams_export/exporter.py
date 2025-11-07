@@ -158,7 +158,7 @@ def export_chat(
     # Normalize format and determine extension
     fmt = output_format.lower()
     if fmt in ("jira", "jira-markdown", "markdown"):
-        suffix = "txt"
+        suffix = "md"
         fmt = "jira"
     else:
         suffix = fmt

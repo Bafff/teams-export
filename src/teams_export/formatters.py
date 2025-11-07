@@ -43,7 +43,7 @@ def _strip_html(content: str | None) -> str:
 
 
 def _format_jira_message(message: dict, index: int) -> str:
-    """Format a single message in Jira-friendly markdown."""
+    """Format a single message in standard Markdown."""
     sender = message.get("sender") or "Unknown"
     timestamp = message.get("timestamp", "")
 
@@ -72,13 +72,30 @@ def _format_jira_message(message: dict, index: int) -> str:
 
     # Format attachments if present
     attachments = message.get("attachments", [])
-    attachment_text = ""
+    attachment_lines = []
     if attachments:
-        attachment_names = []
         for att in attachments:
             name = att.get("name") or "Attachment"
-            attachment_names.append(f"📎 {name}")
-        attachment_text = "\n" + "\n".join(attachment_names)
+            content_type = att.get("contentType", "")
+
+            # Try to get URL from different possible fields
+            url = att.get("contentUrl") or att.get("content") or att.get("url")
+
+            # Check if it's an image
+            is_image = (
+                content_type.startswith("image/") if content_type else
+                any(name.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'])
+            )
+
+            if is_image and url:
+                # Format as markdown image
+                attachment_lines.append(f"![{name}]({url})")
+            elif url:
+                # Format as markdown link
+                attachment_lines.append(f"📎 [{name}]({url})")
+            else:
+                # Just show the name
+                attachment_lines.append(f"📎 {name}")
 
     # Format reactions if present
     reactions = message.get("reactions", [])
@@ -92,22 +109,27 @@ def _format_jira_message(message: dict, index: int) -> str:
         if reaction_emojis:
             reaction_text = f" [{', '.join(reaction_emojis)}]"
 
-    # Build the message block in Jira-friendly format
+    # Build the message block in standard Markdown format
+    # Format content as blockquote (add '> ' prefix to each line)
+    content_lines = content.split('\n')
+    quoted_content = '\n'.join(f"> {line}" if line else ">" for line in content_lines)
+
     lines = [
-        f"*{sender}* — _{timestamp_clean}_{reaction_text}",
-        "{quote}",
-        content,
-        "{quote}",
+        f"**{sender}** — *{timestamp_clean}*{reaction_text}",
+        "",
+        quoted_content,
+        "",
     ]
 
-    if attachment_text:
-        lines.insert(-1, attachment_text)
+    if attachment_lines:
+        lines.extend(attachment_lines)
+        lines.append("")
 
     return "\n".join(lines)
 
 
 def write_jira_markdown(messages: Sequence[dict], output_path: Path, chat_info: dict | None = None) -> None:
-    """Write messages in Jira-compatible markdown format."""
+    """Write messages in standard Markdown format (works in Jira, GitHub, and other platforms)."""
 
     lines = []
 
@@ -117,26 +139,26 @@ def write_jira_markdown(messages: Sequence[dict], output_path: Path, chat_info: 
         participants = chat_info.get("participants", "")
         date_range = chat_info.get("date_range", "")
 
-        lines.append(f"h2. {chat_title}")
+        lines.append(f"## {chat_title}")
         lines.append("")
         if participants:
-            lines.append(f"*Participants:* {participants}")
+            lines.append(f"**Participants:** {participants}")
         if date_range:
-            lines.append(f"*Date Range:* {date_range}")
+            lines.append(f"**Date Range:** {date_range}")
         lines.append("")
-        lines.append("----")
+        lines.append("---")
         lines.append("")
 
     # Add messages
     if messages:
-        lines.append(f"h3. Messages ({len(messages)} total)")
+        lines.append(f"### Messages ({len(messages)} total)")
         lines.append("")
 
         for idx, message in enumerate(messages, 1):
             lines.append(_format_jira_message(message, idx))
-            lines.append("")  # Empty line between messages
+            # No extra empty line needed - _format_jira_message adds it
     else:
-        lines.append("_No messages found in the specified date range._")
+        lines.append("*No messages found in the specified date range.*")
 
     # Write to file
     content = "\n".join(lines)
