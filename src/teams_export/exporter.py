@@ -83,8 +83,9 @@ def _normalise_filename(identifier: str) -> str:
 
 
 def _transform_message(message: dict) -> dict:
-    sender_info = message.get("from", {}).get("user", {})
-    sender_fallback = message.get("from", {}).get("application", {})
+    from_field = message.get("from") or {}
+    sender_info = from_field.get("user") or {}
+    sender_fallback = from_field.get("application") or {}
     sender_display = sender_info.get("displayName") or sender_fallback.get("displayName")
     sender_email = sender_info.get("userPrincipalName") or sender_info.get("email")
 
