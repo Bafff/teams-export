@@ -5,3 +5,6 @@ __pycache__/
 .exports/
 exports/
 .env
+build/
+dist/
+.DS_Store
