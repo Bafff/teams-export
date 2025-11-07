@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -49,6 +50,56 @@ def _print_chat_list(chats: Iterable[dict]) -> None:
         typer.echo(
             f"{chat.get('id')}\t{chat.get('chatType')}\t{_chat_title(chat)}\t{_participants(chat)}"
         )
+
+
+def _select_date_range_interactive() -> tuple[datetime, datetime] | None:
+    """Interactively select date range for export.
+
+    Returns:
+        Tuple of (start_dt, end_dt), or None if user cancels
+    """
+    typer.echo("\n📅 Select export period:")
+    typer.echo("  1. Last 7 days")
+    typer.echo("  2. Last 30 days")
+    typer.echo("  3. Last 90 days")
+    typer.echo("  4. All time (last 1 year)")
+    typer.echo("  5. Custom date range")
+    typer.echo("  q. Cancel export")
+
+    choice = typer.prompt("\nYour choice", default="1").strip().lower()
+
+    if choice == "q":
+        return None
+
+    now = datetime.now().astimezone()
+
+    if choice == "1":
+        start_dt = now - timedelta(days=7)
+        end_dt = now
+    elif choice == "2":
+        start_dt = now - timedelta(days=30)
+        end_dt = now
+    elif choice == "3":
+        start_dt = now - timedelta(days=90)
+        end_dt = now
+    elif choice == "4":
+        start_dt = now - timedelta(days=365)
+        end_dt = now
+    elif choice == "5":
+        # Custom range
+        from_str = typer.prompt("Start date (YYYY-MM-DD, 'today', or 'last week')")
+        to_str = typer.prompt("End date (YYYY-MM-DD, 'today', or 'last week')", default="today")
+        try:
+            start_dt, end_dt = resolve_range(from_str, to_str)
+        except DateParseError as exc:
+            typer.secho(f"Invalid date: {exc}", fg=typer.colors.RED)
+            return None
+    else:
+        typer.secho("Invalid choice", fg=typer.colors.RED)
+        return None
+
+    typer.echo(f"  ✓ Period: {start_dt.date()} to {end_dt.date()}")
+    return start_dt, end_dt
 
 
 def _load_chats_with_progress(client: GraphClient) -> list[dict]:
@@ -139,11 +190,15 @@ def main(
         typer.secho(f"Configuration error: {exc}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    try:
-        start_dt, end_dt = resolve_range(from_date, to_date)
-    except DateParseError as exc:
-        typer.secho(f"Invalid date input: {exc}", fg=typer.colors.RED)
-        raise typer.Exit(code=2)
+    # Parse dates if provided, otherwise they'll be set interactively
+    start_dt = None
+    end_dt = None
+    if from_date or to_date:
+        try:
+            start_dt, end_dt = resolve_range(from_date, to_date)
+        except DateParseError as exc:
+            typer.secho(f"Invalid date input: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(code=2)
 
     typer.echo("Authenticating with Microsoft Graph…")
     try:
@@ -183,6 +238,14 @@ def main(
 
         exports: list[tuple[str, Path, int]] = []
 
+        # Set default date range if not provided (for --all and --user/--chat modes)
+        if start_dt is None and (export_all or participant or chat_name):
+            # Default to last year if dates not specified
+            now = datetime.now().astimezone()
+            start_dt = now - timedelta(days=365)
+            end_dt = now
+            typer.echo(f"Using default date range: {start_dt.date()} to {end_dt.date()}")
+
         if export_all:
             selected_chats = chats
         else:
@@ -202,6 +265,14 @@ def main(
                             if chats:
                                 cache.set(user_id, chats)
                             continue  # Show menu again with refreshed data
+
+                        # Ask for date range if not provided
+                        if start_dt is None:
+                            date_range = _select_date_range_interactive()
+                            if date_range is None:
+                                typer.echo("Export cancelled")
+                                raise typer.Exit(code=0)
+                            start_dt, end_dt = date_range
 
                         selected_chats = [chat]
                         break

@@ -181,6 +181,12 @@ def export_chat(
 
     raw_messages = client.list_chat_messages(chat_id, stop_condition=_stop_condition)
     filtered_messages = [m for m in raw_messages if _within_range(m, start_dt, end_dt)]
+
+    # Sort messages from oldest to newest (Graph API returns newest first)
+    filtered_messages.sort(
+        key=lambda m: m.get("createdDateTime") or m.get("lastModifiedDateTime") or ""
+    )
+
     messages = [_transform_message(m) for m in filtered_messages]
     message_count = len(messages)
 
