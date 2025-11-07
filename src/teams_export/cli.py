@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable
 
@@ -10,6 +11,7 @@ from .config import ConfigError, load_config
 from .dates import DateParseError, resolve_range
 from .exporter import ChatNotFoundError, choose_chat, export_chat
 from .graph import GraphClient
+from .interactive import select_chat_interactive
 
 app = typer.Typer(
     add_completion=False,
@@ -74,11 +76,11 @@ def main(
         help='End date (YYYY-MM-DD, "today", or "last week").',
     ),
     output_format: str = typer.Option(
-        "json",
+        "jira",
         "--format",
         "-o",
         case_sensitive=False,
-        help="Export format: json or csv.",
+        help="Export format: jira (Jira-friendly markdown), json, or csv.",
     ),
     output_dir: Path = typer.Option(
         Path("exports"),
@@ -134,37 +136,96 @@ def main(
             selected_chats = chats
         else:
             if not participant and not chat_name:
-                prompt_value = typer.prompt("Enter chat partner name/email (leave blank to use chat name)", default="")
-                if prompt_value:
-                    participant = prompt_value
+                # Interactive mode - show chat menu
+                try:
+                    chat = select_chat_interactive(
+                        chats,
+                        prompt_message="Select a chat to export:",
+                    )
+                    selected_chats = [chat]
+                except typer.Abort:
+                    raise typer.Exit(code=0)
+            else:
+                # Search mode - try to find by participant or chat name
+                try:
+                    result = choose_chat(chats, participant=participant, chat_name=chat_name)
+                except ChatNotFoundError as exc:
+                    typer.secho(str(exc), fg=typer.colors.RED)
+                    raise typer.Exit(code=4)
+
+                # If multiple matches, let user choose interactively
+                if isinstance(result, list):
+                    typer.echo(f"\nFound {len(result)} matching chats.")
+                    try:
+                        chat = select_chat_interactive(
+                            result,
+                            prompt_message="Multiple chats matched. Please select one:",
+                        )
+                        selected_chats = [chat]
+                    except typer.Abort:
+                        raise typer.Exit(code=0)
                 else:
-                    chat_name = typer.prompt("Enter chat display name", default="") or None
-            try:
-                chat = choose_chat(chats, participant=participant, chat_name=chat_name)
-            except ChatNotFoundError as exc:
-                typer.secho(str(exc), fg=typer.colors.RED)
-                raise typer.Exit(code=4)
-            selected_chats = [chat]
+                    selected_chats = [result]
 
         total_messages = 0
-        for chat in selected_chats:
-            title = _chat_title(chat)
-            typer.echo(f"Exporting chat: {title}")
-            try:
-                output_path, count = export_chat(
-                    client,
-                    chat,
-                    start_dt,
-                    end_dt,
-                    output_dir=output_dir,
-                    output_format=output_format,
-                )
-            except ValueError as exc:
-                typer.secho(str(exc), fg=typer.colors.RED)
-                raise typer.Exit(code=5)
 
-            exports.append((title, output_path, count))
-            total_messages += count
+        # Use parallel processing for multiple chats
+        if len(selected_chats) > 1:
+            typer.echo(f"\nExporting {len(selected_chats)} chats in parallel...")
+
+            def export_single_chat(chat):
+                title = _chat_title(chat)
+                try:
+                    output_path, count = export_chat(
+                        client,
+                        chat,
+                        start_dt,
+                        end_dt,
+                        output_dir=output_dir,
+                        output_format=output_format,
+                    )
+                    return (title, output_path, count, None)
+                except Exception as exc:
+                    return (title, None, 0, str(exc))
+
+            # Use ThreadPoolExecutor for parallel downloads (limited to 3 concurrent)
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {executor.submit(export_single_chat, chat): chat for chat in selected_chats}
+
+                completed = 0
+                for future in as_completed(futures):
+                    title, output_path, count, error = future.result()
+                    completed += 1
+
+                    if error:
+                        typer.secho(f"[{completed}/{len(selected_chats)}] Failed: {title} - {error}", fg=typer.colors.RED)
+                    else:
+                        exports.append((title, output_path, count))
+                        total_messages += count
+                        typer.secho(
+                            f"[{completed}/{len(selected_chats)}] Exported {count} messages from {title}",
+                            fg=typer.colors.GREEN
+                        )
+        else:
+            # Single chat - process directly
+            for chat in selected_chats:
+                title = _chat_title(chat)
+                typer.echo(f"Exporting chat: {title}")
+                try:
+                    output_path, count = export_chat(
+                        client,
+                        chat,
+                        start_dt,
+                        end_dt,
+                        output_dir=output_dir,
+                        output_format=output_format,
+                    )
+                except ValueError as exc:
+                    typer.secho(str(exc), fg=typer.colors.RED)
+                    raise typer.Exit(code=5)
+
+                exports.append((title, output_path, count))
+                total_messages += count
 
     for title, path, count in exports:
         typer.echo(f"Exported {count} messages from {title}; saved to {path}")

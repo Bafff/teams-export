@@ -9,6 +9,7 @@ from typing import Iterable, List, Sequence
 from dateutil import parser
 
 from .graph import GraphClient
+from .formatters import write_jira_markdown
 
 
 class ChatNotFoundError(RuntimeError):
@@ -36,8 +37,13 @@ def choose_chat(
     *,
     participant: str | None = None,
     chat_name: str | None = None,
-) -> dict:
-    """Select a chat by participant identifier or chat display name."""
+) -> dict | List[dict]:
+    """Select a chat by participant identifier or chat display name.
+
+    Returns:
+        Either a single chat dict if exactly one match, or a list of matches
+        if multiple chats matched the criteria.
+    """
 
     name_norm = _normalise(chat_name) if chat_name else None
     participant_norm = _normalise(participant) if participant else None
@@ -64,12 +70,11 @@ def choose_chat(
             "No chat matches the provided identifiers. Try running with --list to"
             " review available chats."
         )
-    if len(matches) > 1:
-        ids = ", ".join(chat.get("id", "?") for chat in matches)
-        raise ChatNotFoundError(
-            f"Multiple chats matched the request. Narrow your query. Matches: {ids}"
-        )
-    return matches[0]
+    if len(matches) == 1:
+        return matches[0]
+
+    # Return all matches for interactive selection
+    return matches
 
 
 def _normalise_filename(identifier: str) -> str:
@@ -149,7 +154,15 @@ def export_chat(
         identifier = members[0] if members else chat_id
     filename_stem = _normalise_filename(identifier)
     output_dir.mkdir(parents=True, exist_ok=True)
-    suffix = output_format.lower()
+
+    # Normalize format and determine extension
+    fmt = output_format.lower()
+    if fmt in ("jira", "jira-markdown", "markdown"):
+        suffix = "txt"
+        fmt = "jira"
+    else:
+        suffix = fmt
+
     if start_dt.date() == end_dt.date():
         date_fragment = start_dt.date().isoformat()
     else:
@@ -171,11 +184,21 @@ def export_chat(
     messages = [_transform_message(m) for m in filtered_messages]
     message_count = len(messages)
 
-    if output_format.lower() == "json":
+    if fmt == "json":
         _write_json(messages, output_path)
-    elif output_format.lower() == "csv":
+    elif fmt == "csv":
         _write_csv(messages, output_path)
+    elif fmt == "jira":
+        # Prepare chat metadata for Jira formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_jira_markdown(messages, output_path, chat_info=chat_info)
     else:
-        raise ValueError("Unsupported export format. Choose json or csv.")
+        raise ValueError("Unsupported export format. Choose json, csv, or jira.")
 
     return output_path, message_count

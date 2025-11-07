@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
 from typing import Callable, Dict, Iterable, Iterator, List, Optional
 
 import requests
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 DEFAULT_TIMEOUT = 60
+MAX_RETRIES = 4
+INITIAL_RETRY_DELAY = 2.0  # seconds
 
 
 class GraphError(RuntimeError):
@@ -24,6 +27,60 @@ class GraphClient:
         )
         self._base_url = base_url.rstrip("/")
 
+    def _request_with_retry(
+        self,
+        url: str,
+        params: Dict[str, str] | None = None,
+    ) -> requests.Response:
+        """Execute a GET request with exponential backoff retry on rate limiting."""
+        last_exception = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = self._session.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+
+                # Handle rate limiting (429) with retry
+                if resp.status_code == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            wait_time = int(retry_after)
+                        except ValueError:
+                            wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+                    else:
+                        wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+
+                    if attempt < MAX_RETRIES - 1:
+                        print(f"Rate limited. Waiting {wait_time}s before retry {attempt + 1}/{MAX_RETRIES}...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise GraphError(self._format_error(resp))
+
+                # Handle other 5xx errors with retry
+                if 500 <= resp.status_code < 600:
+                    if attempt < MAX_RETRIES - 1:
+                        wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+                        print(f"Server error {resp.status_code}. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+
+                # Success or non-retryable error
+                return resp
+
+            except requests.exceptions.RequestException as exc:
+                last_exception = exc
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+                    print(f"Network error: {exc}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
+        # If we exhausted retries
+        if last_exception:
+            raise GraphError(f"Request failed after {MAX_RETRIES} attempts: {last_exception}")
+        raise GraphError(f"Request failed after {MAX_RETRIES} attempts")
+
     def _paginate(
         self,
         url: str,
@@ -32,7 +89,7 @@ class GraphClient:
         stop_condition: Optional[Callable[[dict], bool]] = None,
     ) -> Iterator[dict]:
         while url:
-            resp = self._session.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+            resp = self._request_with_retry(url, params=params)
             params = None  # Only include params on first request.
             if resp.status_code >= 400:
                 raise GraphError(self._format_error(resp))
@@ -70,7 +127,7 @@ class GraphClient:
     ) -> List[dict]:
         url = f"{self._base_url}/me/chats/{chat_id}/messages"
         params = {
-            "$top": "50",
+            "$top": "100",  # Increased from 50 for better performance
         }
         return list(self._paginate(url, params=params, stop_condition=stop_condition))
 

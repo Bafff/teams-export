@@ -35,29 +35,108 @@ Additional background lives in the internal wiki: [Arkadium IT Knowledge Base](h
 
 ## Usage
 
-```
-teams-export --user "john.smith@company.com" --from 2025-10-23 --to 2025-10-23 --format json
+### Quick Start (Interactive Mode)
+
+The simplest way to export a chat is to run without any arguments:
+
+```bash
+teams-export
 ```
 
-- `--user` targets 1:1 chats by participant name or email.
-- `--chat` targets group chats by display name.
-- `--from` / `--to` accept `YYYY-MM-DD`, `today`, or `last week`.
-- `--format` supports `json` (default) or `csv`.
+This will:
+1. Authenticate with Microsoft Graph
+2. Show an interactive menu with your 20 most recent chats
+3. Let you select the chat by number
+4. Export today's messages in Jira-friendly format
+
+### Export by User Email (1:1 chats)
+
+```bash
+teams-export --user "john.smith@company.com"
+```
+
+### Export by Chat Name (Group chats)
+
+```bash
+teams-export --chat "Project Alpha Team"
+```
+
+### Export with Date Range
+
+```bash
+# Specific dates
+teams-export --user "john.smith@company.com" --from 2025-10-23 --to 2025-10-25
+
+# Using keywords
+teams-export --user "john.smith@company.com" --from "last week" --to "today"
+```
+
+### Export in Different Formats
+
+```bash
+# Jira-friendly markdown (default) - perfect for copying into Jira tickets
+teams-export --user "john.smith@company.com" --format jira
+
+# JSON for programmatic processing
+teams-export --user "john.smith@company.com" --format json
+
+# CSV for spreadsheet analysis
+teams-export --user "john.smith@company.com" --format csv
+```
+
+### Other Options
+
 - `--list` prints available chats with participants.
-- `--all` exports every chat in the provided window.
+- `--all` exports every chat in the provided window (uses parallel processing for speed).
 - `--force-login` clears the cache and forces a new device code login.
+- `--output-dir` specifies where to save exports (default: `./exports/`).
 
-Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.json`.
+### Examples
+
+```bash
+# Interactive selection with custom date range
+teams-export --from "2025-10-01" --to "2025-10-31"
+
+# Export all chats from last week in parallel
+teams-export --all --from "last week" --format jira
+
+# List all available chats
+teams-export --list
+
+# Export specific user's chat for today
+teams-export --user "jane.doe@company.com"
+```
+
+Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.txt` (for Jira format) or `john_smith_2025-10-23.json`.
 
 ## Token Cache
 
 MSAL token cache is stored at `~/.teams-exporter/token_cache.json`. The cache refreshes automatically; re-run with `--force-login` to regenerate the device flow.
 
+## Features
+
+### Performance Optimizations
+- **Parallel exports**: When using `--all`, exports multiple chats concurrently (up to 3 at once)
+- **Automatic retry**: Handles API rate limiting (429) and server errors (5xx) with exponential backoff
+- **Optimized pagination**: Fetches 100 messages per request instead of 50
+- **Smart filtering**: Stops fetching when messages are outside the date range
+
+### User Experience Improvements
+- **Interactive chat selection**: Beautiful menu with chat names, types, and last activity
+- **Multiple match handling**: If search finds multiple chats, shows menu instead of error
+- **Jira-ready format**: New default format perfect for pasting into Jira tickets
+  - Clean HTML conversion (removes tags, preserves formatting)
+  - Quote blocks for easy reading
+  - Attachment and reaction indicators
+  - Proper timestamp formatting
+- **Smart defaults**: Defaults to today's date if not specified
+- **Progress tracking**: Shows real-time progress for multi-chat exports
+
 ## Limitations
 
 - Requires delegated permissions for the signed-in user.
 - Attachments are referenced in the output but not downloaded.
-- Microsoft Graph API throttling is not yet handled with automatic retries.
+- Parallel exports limited to 3 concurrent requests to avoid API throttling.
 
 ## Security Notes
 
