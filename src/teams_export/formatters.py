@@ -606,3 +606,121 @@ def write_html(
     # Write to file
     content = "\n".join(html_parts)
     output_path.write_text(content, encoding="utf-8")
+
+
+def write_docx(
+    messages: Sequence[dict],
+    output_path: Path,
+    chat_info: dict | None = None,
+    url_mapping: dict[str, str] | None = None,
+) -> None:
+    """Write messages as Word document with embedded images.
+
+    This format is perfect for copy-pasting into Jira/Confluence:
+    1. Open the .docx file in Word (or LibreOffice)
+    2. Select all (Ctrl+A)
+    3. Copy (Ctrl+C)
+    4. Paste into Jira/Confluence - images will be embedded!
+
+    Args:
+        messages: List of message dictionaries
+        output_path: Path to write .docx file
+        chat_info: Optional chat metadata (title, participants, date range)
+        url_mapping: Optional mapping of remote URLs to local file paths
+    """
+    try:
+        from docx import Document
+        from docx.shared import Inches, Pt, RGBColor
+        from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+    except ImportError:
+        raise ImportError(
+            "python-docx is required for Word document export. "
+            "Install it with: pip install python-docx"
+        )
+
+    doc = Document()
+
+    # Add title and metadata
+    if chat_info:
+        title = doc.add_heading(chat_info.get("title", "Teams Chat Export"), level=1)
+        title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+        if chat_info.get("participants"):
+            p = doc.add_paragraph()
+            p.add_run("Participants: ").bold = True
+            p.add_run(chat_info["participants"])
+
+        if chat_info.get("date_range"):
+            p = doc.add_paragraph()
+            p.add_run("Date Range: ").bold = True
+            p.add_run(chat_info["date_range"])
+
+        doc.add_paragraph("_" * 50)  # Separator
+
+    # Get base directory for resolving image paths
+    base_dir = output_path.parent
+
+    # Add each message
+    for idx, message in enumerate(messages, 1):
+        sender = message.get("from", {}).get("displayName") or "Unknown"
+        timestamp = message.get("createdDateTime", "")
+        timestamp_clean = timestamp.replace("T", " ").replace("Z", " UTC") if timestamp else "Unknown time"
+
+        # Message header (sender and timestamp)
+        p = doc.add_paragraph()
+        sender_run = p.add_run(f"{sender}")
+        sender_run.bold = True
+        sender_run.font.size = Pt(11)
+        sender_run.font.color.rgb = RGBColor(0, 120, 212)  # Microsoft blue
+
+        time_run = p.add_run(f" — {timestamp_clean}")
+        time_run.font.size = Pt(10)
+        time_run.font.color.rgb = RGBColor(102, 102, 102)  # Gray
+
+        # Add reactions if present
+        reactions = message.get("reactions", [])
+        if reactions:
+            reaction_emojis = []
+            for reaction in reactions:
+                reaction_type = reaction.get("reactionType", "")
+                if reaction_type:
+                    reaction_emojis.append(reaction_type)
+            if reaction_emojis:
+                reaction_run = p.add_run(f" [{', '.join(reaction_emojis)}]")
+                reaction_run.font.color.rgb = RGBColor(102, 102, 102)
+
+        # Message content
+        content = message.get("body", {}).get("content", "")
+        text_content = _strip_html(content)
+        if text_content:
+            p = doc.add_paragraph(text_content)
+            p.paragraph_format.left_indent = Inches(0.3)
+
+        # Extract and add inline images
+        html_content = message.get("body", {}).get("content", "")
+        inline_images = _extract_images_from_html(html_content)
+
+        for img in inline_images:
+            src = img.get("src", "")
+            # Try to get local path from url_mapping
+            local_path = url_mapping.get(src) if url_mapping else None
+
+            if local_path and base_dir:
+                img_path = base_dir / local_path
+                if img_path.exists():
+                    try:
+                        # Add image with max width of 5 inches
+                        p = doc.add_paragraph()
+                        run = p.add_run()
+                        run.add_picture(str(img_path), width=Inches(5))
+                        p.paragraph_format.left_indent = Inches(0.3)
+                    except Exception as e:
+                        # If image can't be added, add a note
+                        p = doc.add_paragraph(f"[Image: {img.get('alt', 'image')} - failed to embed: {e}]")
+                        p.paragraph_format.left_indent = Inches(0.3)
+
+        # Add spacing between messages
+        doc.add_paragraph()
+
+    # Save document
+    doc.save(str(output_path))

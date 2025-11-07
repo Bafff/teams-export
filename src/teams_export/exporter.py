@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from dateutil import parser
 
 from .graph import GraphClient
-from .formatters import write_jira_markdown, write_html
+from .formatters import write_jira_markdown, write_html, write_docx
 
 
 class ChatNotFoundError(RuntimeError):
@@ -335,6 +335,9 @@ def export_chat(
         fmt = "jira"
     elif fmt == "html":
         suffix = "html"
+    elif fmt in ("docx", "word"):
+        suffix = "docx"
+        fmt = "docx"
     else:
         suffix = fmt
 
@@ -398,7 +401,17 @@ def export_chat(
             "date_range": f"{start_dt.date()} to {end_dt.date()}",
         }
         write_html(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
+    elif fmt == "docx":
+        # Prepare chat metadata for Word document formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_docx(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
     else:
-        raise ValueError("Unsupported export format. Choose json, csv, jira, or html.")
+        raise ValueError("Unsupported export format. Choose json, csv, jira, html, or docx.")
 
     return output_path, message_count
