@@ -125,6 +125,16 @@ Use `--refresh-cache` to force a refresh if you know new chats were created.
 
 **Note:** Chats are sorted by last message timestamp (using `lastMessagePreview`), matching the behavior of the Teams desktop client.
 
+### Graph API Sorting Limitation
+
+The Microsoft Graph API's `/me/chats` endpoint does **not** support the `$orderby` query parameter ([see official documentation](https://learn.microsoft.com/en-us/graph/api/chat-list?view=graph-rest-1.0&tabs=http#optional-query-parameters)). This means:
+
+- Chats cannot be sorted server-side by last message time
+- All chats must be loaded to achieve correct chronological sorting
+- Client-side sorting is performed using `lastMessagePreview.createdDateTime`
+
+This is why the initial load fetches all chats (with progress indication) rather than loading only the most recent N chats. The 5-minute cache ensures subsequent runs are instant.
+
 ## Features
 
 ### Performance Optimizations

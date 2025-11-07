@@ -166,7 +166,7 @@ class GraphClient:
     ) -> List[dict]:
         url = f"{self._base_url}/me/chats/{chat_id}/messages"
         params = {
-            "$top": "100",  # Increased from 50 for better performance
+            "$top": "50",  # Graph API maximum for chat messages endpoint
         }
         return list(self._paginate(url, params=params, stop_condition=stop_condition))
 
