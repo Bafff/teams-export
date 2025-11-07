@@ -89,8 +89,14 @@ teams-export --user "john.smith@company.com" --format csv
 - `--list` prints available chats with participants.
 - `--all` exports every chat in the provided window (uses parallel processing for speed).
 - `--force-login` clears the cache and forces a new device code login.
-- `--refresh-cache` forces refresh of chat list (bypasses 5-minute cache).
+- `--refresh-cache` forces refresh of chat list (bypasses 24-hour cache).
 - `--output-dir` specifies where to save exports (default: `./exports/`).
+
+**Interactive Menu Controls:**
+- Enter number (1-20) to select a chat
+- Press `s` to search across all chats
+- Press `c` to refresh chat list from API
+- Press `q` to quit
 
 ### Examples
 
@@ -116,12 +122,14 @@ Exports are saved under `./exports/` by default with filenames like `john_smith_
 MSAL token cache is stored at `~/.teams-exporter/token_cache.json`. The cache refreshes automatically; re-run with `--force-login` to regenerate the device flow.
 
 ### Chat List Cache
-To speed up repeated operations, the chat list is cached locally for 5 minutes at `~/.teams-exporter/cache/chats_cache.json`.
+To speed up repeated operations, the chat list is cached locally for 24 hours at `~/.teams-exporter/cache/chats_cache.json`.
 
 **First run:** Loads all chats from API (~30-60 seconds for 1000+ chats)
-**Subsequent runs (within 5 min):** Instant load from cache
+**Subsequent runs (within 24h):** Instant load from cache
 
-Use `--refresh-cache` to force a refresh if you know new chats were created.
+To refresh the cache:
+- **Interactive menu**: Press `c` during chat selection to refresh and reload
+- **Command line**: Use `--refresh-cache` flag to force refresh before showing menu
 
 **Note:** Chats are sorted by last message timestamp (using `lastMessagePreview`), matching the behavior of the Teams desktop client.
 
@@ -133,15 +141,15 @@ The Microsoft Graph API's `/me/chats` endpoint does **not** support the `$orderb
 - All chats must be loaded to achieve correct chronological sorting
 - Client-side sorting is performed using `lastMessagePreview.createdDateTime`
 
-This is why the initial load fetches all chats (with progress indication) rather than loading only the most recent N chats. The 5-minute cache ensures subsequent runs are instant.
+This is why the initial load fetches all chats (with progress indication) rather than loading only the most recent N chats. The 24-hour cache ensures subsequent runs are instant.
 
 ## Features
 
 ### Performance Optimizations
-- **Chat list caching**: 5-minute local cache makes repeated runs instant
+- **Chat list caching**: 24-hour local cache makes repeated runs instant
 - **Parallel exports**: When using `--all`, exports multiple chats concurrently (up to 3 at once)
 - **Automatic retry**: Handles API rate limiting (429) and server errors (5xx) with exponential backoff
-- **Optimized pagination**: Fetches 100 messages per request instead of 50
+- **Optimized pagination**: Fetches 50 messages per request (Graph API maximum)
 - **Smart filtering**: Stops fetching when messages are outside the date range
 
 ### User Experience Improvements

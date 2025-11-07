@@ -139,7 +139,7 @@ def select_chat_interactive(
     while True:
         try:
             selection = typer.prompt(
-                f"\nEnter chat number (1-{len(display_chats)}), 's' to search, or 'q' to quit",
+                f"\nEnter chat number (1-{len(display_chats)}), 's' to search, 'c' to refresh cache, or 'q' to quit",
                 default="",
             )
 
@@ -149,6 +149,12 @@ def select_chat_interactive(
 
             if not selection:
                 continue
+
+            # Refresh cache mode
+            if selection.lower() in ("c", "cache", "refresh"):
+                typer.secho("Requesting cache refresh...", fg=typer.colors.YELLOW)
+                # Return a special marker to signal cache refresh
+                return {"__action__": "refresh_cache"}
 
             # Search mode
             if selection.lower() in ("s", "search"):
@@ -204,7 +210,7 @@ def select_chat_interactive(
                     fg=typer.colors.YELLOW,
                 )
         except ValueError:
-            typer.secho("Invalid input. Please enter a number or 's' to search.", fg=typer.colors.YELLOW)
+            typer.secho("Invalid input. Please enter a number, 's' to search, or 'c' to refresh cache.", fg=typer.colors.YELLOW)
         except (KeyboardInterrupt, EOFError):
             typer.echo("\nSelection cancelled.")
             raise typer.Abort()

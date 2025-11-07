@@ -140,7 +140,7 @@ def main(
         if not refresh_cache:
             chats = cache.get(user_id)
             if chats:
-                typer.secho(f"✓ Loaded {len(chats)} chats from cache (5-min TTL)", fg=typer.colors.CYAN)
+                typer.secho(f"✓ Loaded {len(chats)} chats from cache (24h TTL, press 'c' in menu to refresh)", fg=typer.colors.CYAN)
 
         # If no cache or refresh requested, load from API
         if chats is None:
@@ -177,16 +177,36 @@ def main(
             selected_chats = chats
         else:
             if not participant and not chat_name:
-                # Interactive mode - show chat menu
-                try:
-                    chat = select_chat_interactive(
-                        chats,
-                        prompt_message="Select a chat to export:",
-                        showing_limited=False,
-                    )
-                    selected_chats = [chat]
-                except typer.Abort:
-                    raise typer.Exit(code=0)
+                # Interactive mode - show chat menu (with cache refresh support)
+                while True:
+                    try:
+                        chat = select_chat_interactive(
+                            chats,
+                            prompt_message="Select a chat to export:",
+                            showing_limited=False,
+                        )
+
+                        # Check if user requested cache refresh
+                        if isinstance(chat, dict) and chat.get("__action__") == "refresh_cache":
+                            typer.echo("Refreshing chat list from Microsoft Graph...")
+
+                            def show_progress(count: int) -> None:
+                                sys.stdout.write(f"\rLoading chats... {count} loaded")
+                                sys.stdout.flush()
+
+                            chats = client.list_chats(limit=None, progress_callback=show_progress)
+
+                            if chats:
+                                sys.stdout.write("\r" + " " * 50 + "\r")
+                                sys.stdout.flush()
+                                typer.secho(f"✓ Refreshed {len(chats)} chats", fg=typer.colors.GREEN)
+                                cache.set(user_id, chats)
+                            continue  # Show menu again with refreshed data
+
+                        selected_chats = [chat]
+                        break
+                    except typer.Abort:
+                        raise typer.Exit(code=0)
             else:
                 # Search mode - try to find by participant or chat name
                 try:

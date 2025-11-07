@@ -9,7 +9,7 @@ from typing import List, Optional
 
 
 DEFAULT_CACHE_DIR = Path("~/.teams-exporter/cache").expanduser()
-CACHE_TTL_SECONDS = 300  # 5 minutes
+CACHE_TTL_SECONDS = 86400  # 24 hours (1 day)
 
 
 class ChatCache:
