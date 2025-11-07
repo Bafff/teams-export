@@ -6,6 +6,68 @@ import sys
 from typing import List, Sequence
 
 import typer
+import wcwidth
+
+
+def _visual_width(text: str) -> int:
+    """Calculate the visual width of text in terminal (handles emoji correctly)."""
+    return wcwidth.wcswidth(text)
+
+
+def _truncate_to_width(text: str, max_width: int, ellipsis: str = "...") -> str:
+    """Truncate text to fit within visual width, accounting for emoji.
+
+    Args:
+        text: Text to truncate
+        max_width: Maximum visual width in terminal
+        ellipsis: String to append when truncating
+
+    Returns:
+        Truncated text that fits within max_width
+    """
+    if _visual_width(text) <= max_width:
+        return text
+
+    ellipsis_width = _visual_width(ellipsis)
+    target_width = max_width - ellipsis_width
+
+    if target_width <= 0:
+        return ellipsis[:max_width]
+
+    # Build string up to target width
+    result = ""
+    current_width = 0
+
+    for char in text:
+        char_width = wcwidth.wcwidth(char)
+        if char_width < 0:  # Control characters
+            char_width = 0
+
+        if current_width + char_width > target_width:
+            break
+
+        result += char
+        current_width += char_width
+
+    return result + ellipsis
+
+
+def _pad_to_width(text: str, target_width: int) -> str:
+    """Pad text to target visual width with spaces.
+
+    Args:
+        text: Text to pad
+        target_width: Target visual width
+
+    Returns:
+        Text padded with spaces to reach target_width
+    """
+    current_width = _visual_width(text)
+    if current_width >= target_width:
+        return text
+
+    padding_needed = target_width - current_width
+    return text + (" " * padding_needed)
 
 
 def _chat_display_name(chat: dict) -> str:
@@ -113,9 +175,10 @@ def select_chat_interactive(
         else:
             last_updated = chat.get("lastUpdatedDateTime", "N/A")
 
-        # Truncate long names
-        if len(name) > 47:
-            name = name[:44] + "..."
+        # Truncate and pad fields to fixed visual widths (handles emoji correctly)
+        name_formatted = _pad_to_width(_truncate_to_width(name, 50), 50)
+        chat_type_formatted = _pad_to_width(chat_type, 8)
+        idx_formatted = _pad_to_width(str(idx), 4)
 
         # Format timestamp
         if last_updated and last_updated != "N/A":
@@ -127,7 +190,9 @@ def select_chat_interactive(
         else:
             timestamp_display = "N/A"
 
-        typer.echo(f"{idx:<4} {chat_type:<8} {name:<50} {timestamp_display:<20}")
+        timestamp_formatted = _pad_to_width(timestamp_display, 20)
+
+        typer.echo(f"{idx_formatted}{chat_type_formatted}{name_formatted}{timestamp_formatted}")
 
     if len(sorted_chats) > show_limit:
         typer.echo("-" * 80)
@@ -180,8 +245,8 @@ def select_chat_interactive(
                 typer.echo("-" * 80)
                 for idx, chat in enumerate(search_results[:20], 1):
                     name = _chat_display_name(chat)
-                    if len(name) > 60:
-                        name = name[:57] + "..."
+                    # Truncate with proper emoji handling
+                    name = _truncate_to_width(name, 60)
                     typer.echo(f"{idx:<4} {name}")
 
                 if len(search_results) > 20:
