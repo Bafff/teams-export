@@ -371,7 +371,7 @@ def export_chat(
     # Download attachments if requested (only for formats that support it)
     url_mapping = {}
     attachments_dir = None
-    if download_attachments and fmt in ("jira", "html") and messages:
+    if download_attachments and fmt in ("jira", "html", "docx") and messages:
         # Create attachments directory next to output file
         attachments_dir_name = output_path.stem + "_files"
         attachments_dir = output_path.parent / attachments_dir_name
