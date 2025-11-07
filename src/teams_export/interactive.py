@@ -40,7 +40,20 @@ def _chat_type_label(chat: dict) -> str:
 
 
 def _chat_last_updated(chat: dict) -> str:
-    """Extract last updated timestamp for sorting."""
+    """Extract last message timestamp for sorting.
+
+    Uses lastMessagePreview.createdDateTime which reflects the actual
+    last message time (what desktop Teams uses for sorting).
+    Falls back to lastUpdatedDateTime if preview not available.
+    """
+    # Try to get last message timestamp (most accurate)
+    last_message_preview = chat.get("lastMessagePreview")
+    if last_message_preview and isinstance(last_message_preview, dict):
+        created = last_message_preview.get("createdDateTime")
+        if created:
+            return created
+
+    # Fallback to chat's lastUpdatedDateTime
     return chat.get("lastUpdatedDateTime", "")
 
 
@@ -92,7 +105,13 @@ def select_chat_interactive(
     for idx, chat in enumerate(display_chats, 1):
         name = _chat_display_name(chat)
         chat_type = _chat_type_label(chat)
-        last_updated = chat.get("lastUpdatedDateTime", "N/A")
+
+        # Get timestamp from lastMessagePreview (most accurate) or fallback
+        last_message_preview = chat.get("lastMessagePreview")
+        if last_message_preview and isinstance(last_message_preview, dict):
+            last_updated = last_message_preview.get("createdDateTime", "N/A")
+        else:
+            last_updated = chat.get("lastUpdatedDateTime", "N/A")
 
         # Truncate long names
         if len(name) > 47:

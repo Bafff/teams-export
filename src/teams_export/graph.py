@@ -144,11 +144,11 @@ class GraphClient:
             progress_callback: Function called with count after each page
 
         Returns:
-            List of chat objects with expanded members
+            List of chat objects with expanded members and lastMessagePreview
         """
         url = f"{self._base_url}/me/chats"
         params = {
-            "$expand": "members",
+            "$expand": "members,lastMessagePreview",
             "$top": "50",  # Fetch 50 chats per request
         }
         return list(self._paginate(

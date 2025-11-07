@@ -123,6 +123,8 @@ To speed up repeated operations, the chat list is cached locally for 5 minutes a
 
 Use `--refresh-cache` to force a refresh if you know new chats were created.
 
+**Note:** Chats are sorted by last message timestamp (using `lastMessagePreview`), matching the behavior of the Teams desktop client.
+
 ## Features
 
 ### Performance Optimizations
