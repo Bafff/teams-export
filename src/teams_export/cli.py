@@ -51,6 +51,28 @@ def _print_chat_list(chats: Iterable[dict]) -> None:
         )
 
 
+def _load_chats_with_progress(client: GraphClient) -> list[dict]:
+    """Load all chats from Microsoft Graph with progress indicator.
+
+    Returns:
+        List of chat objects
+    """
+    def show_progress(count: int) -> None:
+        sys.stdout.write(f"\rLoading chats... {count} loaded")
+        sys.stdout.flush()
+
+    typer.echo("Loading chats from Microsoft Graph...")
+    chats = client.list_chats(limit=None, progress_callback=show_progress)
+
+    # Clear progress line
+    if chats:
+        sys.stdout.write("\r" + " " * 50 + "\r")
+        sys.stdout.flush()
+        typer.secho(f"✓ Loaded {len(chats)} chats", fg=typer.colors.GREEN)
+
+    return chats
+
+
 @app.command()
 def main(
     participant: str = typer.Option(
@@ -144,21 +166,9 @@ def main(
 
         # If no cache or refresh requested, load from API
         if chats is None:
-            # Progress callback for chat loading
-            def show_progress(count: int) -> None:
-                sys.stdout.write(f"\rLoading chats... {count} loaded")
-                sys.stdout.flush()
-
-            typer.echo("Loading chats from Microsoft Graph...")
-            chats = client.list_chats(limit=None, progress_callback=show_progress)
-
-            # Clear progress line
+            chats = _load_chats_with_progress(client)
+            # Save to cache for next time
             if chats:
-                sys.stdout.write("\r" + " " * 50 + "\r")
-                sys.stdout.flush()
-                typer.secho(f"✓ Loaded {len(chats)} chats", fg=typer.colors.GREEN)
-
-                # Save to cache for next time
                 cache.set(user_id, chats)
 
         if list_chats:
@@ -188,18 +198,8 @@ def main(
 
                         # Check if user requested cache refresh
                         if isinstance(chat, dict) and chat.get("__action__") == "refresh_cache":
-                            typer.echo("Refreshing chat list from Microsoft Graph...")
-
-                            def show_progress(count: int) -> None:
-                                sys.stdout.write(f"\rLoading chats... {count} loaded")
-                                sys.stdout.flush()
-
-                            chats = client.list_chats(limit=None, progress_callback=show_progress)
-
+                            chats = _load_chats_with_progress(client)
                             if chats:
-                                sys.stdout.write("\r" + " " * 50 + "\r")
-                                sys.stdout.flush()
-                                typer.secho(f"✓ Refreshed {len(chats)} chats", fg=typer.colors.GREEN)
                                 cache.set(user_id, chats)
                             continue  # Show menu again with refreshed data
 
