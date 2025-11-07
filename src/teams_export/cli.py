@@ -59,11 +59,12 @@ def _select_date_range_interactive() -> tuple[datetime, datetime] | None:
         Tuple of (start_dt, end_dt), or None if user cancels
     """
     typer.echo("\n📅 Select export period:")
-    typer.echo("  1. Last 7 days")
-    typer.echo("  2. Last 30 days")
-    typer.echo("  3. Last 90 days")
-    typer.echo("  4. All time (last 1 year)")
-    typer.echo("  5. Custom date range")
+    typer.echo("  1. Today (last 24 hours)")
+    typer.echo("  2. Last 7 days")
+    typer.echo("  3. Last 30 days")
+    typer.echo("  4. Last 90 days")
+    typer.echo("  5. All time (last 1 year)")
+    typer.echo("  6. Custom date range")
     typer.echo("  q. Cancel export")
 
     choice = typer.prompt("\nYour choice", default="1").strip().lower()
@@ -74,18 +75,22 @@ def _select_date_range_interactive() -> tuple[datetime, datetime] | None:
     now = datetime.now().astimezone()
 
     if choice == "1":
-        start_dt = now - timedelta(days=7)
+        # Last 24 hours (today)
+        start_dt = now - timedelta(hours=24)
         end_dt = now
     elif choice == "2":
-        start_dt = now - timedelta(days=30)
+        start_dt = now - timedelta(days=7)
         end_dt = now
     elif choice == "3":
-        start_dt = now - timedelta(days=90)
+        start_dt = now - timedelta(days=30)
         end_dt = now
     elif choice == "4":
-        start_dt = now - timedelta(days=365)
+        start_dt = now - timedelta(days=90)
         end_dt = now
     elif choice == "5":
+        start_dt = now - timedelta(days=365)
+        end_dt = now
+    elif choice == "6":
         # Custom range
         from_str = typer.prompt("Start date (YYYY-MM-DD, 'today', or 'last week')")
         to_str = typer.prompt("End date (YYYY-MM-DD, 'today', or 'last week')", default="today")
