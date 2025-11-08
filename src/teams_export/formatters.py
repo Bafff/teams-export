@@ -729,6 +729,57 @@ def write_docx(
                         p = doc.add_paragraph(f"[Image: {img.get('alt', 'image')} - failed to embed: {e}]")
                         p.paragraph_format.left_indent = Inches(0.3)
 
+        # Process file attachments
+        attachments = message.get("attachments", [])
+        if attachments:
+            for att in attachments:
+                name = att.get("name") or "Attachment"
+                content_type = att.get("contentType", "")
+
+                url = (
+                    att.get("contentUrl") or
+                    att.get("content") or
+                    att.get("url") or
+                    att.get("thumbnailUrl") or
+                    (att.get("hostedContents", {}).get("contentUrl") if isinstance(att.get("hostedContents"), dict) else None)
+                )
+
+                is_image = (
+                    content_type.startswith("image/") if content_type else
+                    any(name.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'])
+                )
+
+                if is_image and url:
+                    # Try to get local path from url_mapping
+                    local_path = url_mapping.get(url) if url_mapping else None
+
+                    if local_path and base_dir:
+                        img_path = base_dir / local_path
+                        if img_path.exists():
+                            try:
+                                # Add image with max width of 5 inches
+                                p = doc.add_paragraph()
+                                run = p.add_run()
+                                run.add_picture(str(img_path), width=Inches(5))
+                                p.paragraph_format.left_indent = Inches(0.3)
+                            except Exception as e:
+                                # If image can't be added, add a note
+                                p = doc.add_paragraph(f"[Image: {name} - failed to embed: {e}]")
+                                p.paragraph_format.left_indent = Inches(0.3)
+                elif url:
+                    # Non-image attachment - add as hyperlink
+                    local_path = url_mapping.get(url) if url_mapping else None
+                    display_url = local_path if local_path else url
+
+                    p = doc.add_paragraph()
+                    p.paragraph_format.left_indent = Inches(0.3)
+                    run = p.add_run("📎 ")
+                    hyperlink_run = p.add_run(name)
+                    hyperlink_run.font.color.rgb = RGBColor(0, 0, 255)
+                    hyperlink_run.font.underline = True
+                    # Note: Word hyperlinks require more complex code, so we just style it
+                    # Users can click the file in the _files folder directly
+
         # Add spacing between messages
         doc.add_paragraph()
 

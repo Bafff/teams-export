@@ -140,6 +140,7 @@ def _write_csv(messages: Sequence[dict], output_path: Path) -> None:
 def _get_extension_from_mime(mime_type: str) -> str:
     """Get file extension from MIME type."""
     mime_to_ext = {
+        # Images
         'image/png': '.png',
         'image/jpeg': '.jpg',
         'image/jpg': '.jpg',
@@ -148,13 +149,50 @@ def _get_extension_from_mime(mime_type: str) -> str:
         'image/webp': '.webp',
         'image/svg+xml': '.svg',
         'image/tiff': '.tiff',
+        'image/x-icon': '.ico',
+        # Documents
         'application/pdf': '.pdf',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+        'application/vnd.ms-powerpoint': '.ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+        'application/vnd.oasis.opendocument.text': '.odt',
+        'application/vnd.oasis.opendocument.spreadsheet': '.ods',
+        'application/vnd.oasis.opendocument.presentation': '.odp',
+        # Archives
         'application/zip': '.zip',
         'application/x-zip-compressed': '.zip',
+        'application/x-rar-compressed': '.rar',
+        'application/x-7z-compressed': '.7z',
+        'application/gzip': '.gz',
+        'application/x-tar': '.tar',
+        # Text
         'text/plain': '.txt',
+        'text/csv': '.csv',
+        'text/html': '.html',
+        'text/css': '.css',
+        'text/javascript': '.js',
         'application/json': '.json',
         'application/xml': '.xml',
-        'text/html': '.html',
+        'text/xml': '.xml',
+        'text/markdown': '.md',
+        # Code
+        'application/x-python': '.py',
+        'text/x-python': '.py',
+        'application/x-sh': '.sh',
+        # Video
+        'video/mp4': '.mp4',
+        'video/mpeg': '.mpeg',
+        'video/quicktime': '.mov',
+        'video/x-msvideo': '.avi',
+        'video/webm': '.webm',
+        # Audio
+        'audio/mpeg': '.mp3',
+        'audio/wav': '.wav',
+        'audio/ogg': '.ogg',
+        'audio/webm': '.weba',
     }
     return mime_to_ext.get(mime_type.lower(), '.bin')
 
@@ -180,8 +218,12 @@ def _download_attachment(client: GraphClient, url: str, output_path: Path) -> tu
         return False, None
 
 
-def _extract_image_urls(messages: Sequence[dict]) -> List[str]:
-    """Extract all image URLs from messages (both inline and attachments)."""
+def _extract_attachment_urls(messages: Sequence[dict]) -> List[tuple[str, bool]]:
+    """Extract all attachment URLs from messages (both inline images and file attachments).
+
+    Returns:
+        List of tuples (url, is_image) where is_image indicates if the attachment is an image.
+    """
     import re
 
     urls = []
@@ -193,7 +235,7 @@ def _extract_image_urls(messages: Sequence[dict]) -> List[str]:
             for match in re.finditer(img_pattern, content, flags=re.IGNORECASE):
                 url = match.group(1)
                 if url and url.startswith("http"):
-                    urls.append(url)
+                    urls.append((url, True))  # Inline images are always images
 
         # Extract from attachments array
         attachments = message.get("attachments", [])
@@ -214,8 +256,7 @@ def _extract_image_urls(messages: Sequence[dict]) -> List[str]:
                     content_type.startswith("image/") if content_type else
                     any(name.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'])
                 )
-                if is_image:
-                    urls.append(url)
+                urls.append((url, is_image))
 
     return urls
 
@@ -225,7 +266,7 @@ def _download_attachments(
     messages: Sequence[dict],
     attachments_dir: Path,
 ) -> dict[str, str]:
-    """Download all image attachments and return URL -> local path mapping.
+    """Download all attachments (images and files) and return URL -> local path mapping.
 
     Args:
         client: Authenticated Graph API client
@@ -237,17 +278,26 @@ def _download_attachments(
     """
     attachments_dir.mkdir(parents=True, exist_ok=True)
 
-    urls = _extract_image_urls(messages)
-    unique_urls = list(dict.fromkeys(urls))  # Remove duplicates while preserving order
+    url_tuples = _extract_attachment_urls(messages)
+    unique_url_tuples = list(dict.fromkeys(url_tuples))  # Remove duplicates while preserving order
 
     url_mapping = {}
 
-    if not unique_urls:
+    if not unique_url_tuples:
         return url_mapping
 
-    print(f"\nDownloading {len(unique_urls)} image(s)...")
+    # Count images and non-images
+    image_count = sum(1 for _, is_image in unique_url_tuples if is_image)
+    file_count = len(unique_url_tuples) - image_count
 
-    for idx, url in enumerate(unique_urls, 1):
+    if image_count and file_count:
+        print(f"\nDownloading {image_count} image(s) and {file_count} file(s)...")
+    elif image_count:
+        print(f"\nDownloading {image_count} image(s)...")
+    else:
+        print(f"\nDownloading {file_count} file(s)...")
+
+    for idx, (url, is_image) in enumerate(unique_url_tuples, 1):
         # Generate base filename (without extension) from URL or use index
         try:
             parsed = urlparse(url)
@@ -259,9 +309,13 @@ def _download_attachments(
                 if '.' in base_filename:
                     base_filename = base_filename.rsplit('.', 1)[0]
             else:
-                base_filename = f"image_{idx:03d}"
+                # Use appropriate prefix based on file type
+                prefix = "image" if is_image else "file"
+                base_filename = f"{prefix}_{idx:03d}"
         except Exception:
-            base_filename = f"image_{idx:03d}"
+            # Use appropriate prefix based on file type
+            prefix = "image" if is_image else "file"
+            base_filename = f"{prefix}_{idx:03d}"
 
         # Sanitize base filename
         base_filename = re.sub(r'[^\w\-]', '_', base_filename)
@@ -277,8 +331,8 @@ def _download_attachments(
             if content_type:
                 extension = _get_extension_from_mime(content_type)
             else:
-                # Fallback to .png for images
-                extension = '.png'
+                # Fallback based on type
+                extension = '.png' if is_image else '.bin'
 
             # Create final filename with correct extension
             final_filename = f"{base_filename}{extension}"
