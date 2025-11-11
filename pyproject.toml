@@ -15,7 +15,9 @@ dependencies = [
   "typer>=0.12",
   "requests>=2.32",
   "msal>=1.28",
-  "python-dateutil>=2.9"
+  "python-dateutil>=2.9",
+  "wcwidth>=0.2",
+  "python-docx>=1.0"
 ]
 
 [project.scripts]

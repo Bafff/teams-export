@@ -35,29 +35,148 @@ Additional background lives in the internal wiki: [Arkadium IT Knowledge Base](h
 
 ## Usage
 
-```
-teams-export --user "john.smith@company.com" --from 2025-10-23 --to 2025-10-23 --format json
+### Quick Start (Interactive Mode)
+
+The simplest way to export a chat is to run without any arguments:
+
+```bash
+teams-export
 ```
 
-- `--user` targets 1:1 chats by participant name or email.
-- `--chat` targets group chats by display name.
-- `--from` / `--to` accept `YYYY-MM-DD`, `today`, or `last week`.
-- `--format` supports `json` (default) or `csv`.
+This will:
+1. Authenticate with Microsoft Graph
+2. Show an interactive menu with your 20 most recent chats
+3. Let you select the chat by number
+4. Export today's messages in Jira-friendly format
+
+### Export by User Email (1:1 chats)
+
+```bash
+teams-export --user "john.smith@company.com"
+```
+
+### Export by Chat Name (Group chats)
+
+```bash
+teams-export --chat "Project Alpha Team"
+```
+
+### Export with Date Range
+
+```bash
+# Specific dates
+teams-export --user "john.smith@company.com" --from 2025-10-23 --to 2025-10-25
+
+# Using keywords
+teams-export --user "john.smith@company.com" --from "last week" --to "today"
+```
+
+### Export in Different Formats
+
+```bash
+# Markdown (default) - works in Jira, GitHub, Confluence, etc.
+teams-export --user "john.smith@company.com" --format jira
+
+# JSON for programmatic processing
+teams-export --user "john.smith@company.com" --format json
+
+# CSV for spreadsheet analysis
+teams-export --user "john.smith@company.com" --format csv
+```
+
+The default Markdown format includes:
+- Standard Markdown syntax (compatible with Jira, GitHub, Confluence)
+- Clickable links for attachments
+- Inline image rendering for shared images
+- Message quotes and formatting preserved
+
+### Other Options
+
 - `--list` prints available chats with participants.
-- `--all` exports every chat in the provided window.
+- `--all` exports every chat in the provided window (uses parallel processing for speed).
 - `--force-login` clears the cache and forces a new device code login.
+- `--refresh-cache` forces refresh of chat list (bypasses 24-hour cache).
+- `--output-dir` specifies where to save exports (default: `./exports/`).
 
-Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.json`.
+**Interactive Menu Controls:**
+- Enter number (1-20) to select a chat
+- Press `s` to search across all chats
+- Press `c` to refresh chat list from API
+- Press `q` to quit
 
-## Token Cache
+### Examples
 
+```bash
+# Interactive selection with custom date range
+teams-export --from "2025-10-01" --to "2025-10-31"
+
+# Export all chats from last week in parallel
+teams-export --all --from "last week" --format jira
+
+# List all available chats
+teams-export --list
+
+# Export specific user's chat for today
+teams-export --user "jane.doe@company.com"
+```
+
+Exports are saved under `./exports/` by default with filenames like `john_smith_2025-10-23.md` (for Markdown/Jira format) or `john_smith_2025-10-23.json`.
+
+## Caching
+
+### Token Cache
 MSAL token cache is stored at `~/.teams-exporter/token_cache.json`. The cache refreshes automatically; re-run with `--force-login` to regenerate the device flow.
+
+### Chat List Cache
+To speed up repeated operations, the chat list is cached locally for 24 hours at `~/.teams-exporter/cache/chats_cache.json`.
+
+**First run:** Loads all chats from API (~30-60 seconds for 1000+ chats)
+**Subsequent runs (within 24h):** Instant load from cache
+
+To refresh the cache:
+- **Interactive menu**: Press `c` during chat selection to refresh and reload
+- **Command line**: Use `--refresh-cache` flag to force refresh before showing menu
+
+**Note:** Chats are sorted by last message timestamp (using `lastMessagePreview`), matching the behavior of the Teams desktop client.
+
+### Graph API Sorting Limitation
+
+The Microsoft Graph API's `/me/chats` endpoint does **not** support the `$orderby` query parameter ([see official documentation](https://learn.microsoft.com/en-us/graph/api/chat-list?view=graph-rest-1.0&tabs=http#optional-query-parameters)). This means:
+
+- Chats cannot be sorted server-side by last message time
+- All chats must be loaded to achieve correct chronological sorting
+- Client-side sorting is performed using `lastMessagePreview.createdDateTime`
+
+This is why the initial load fetches all chats (with progress indication) rather than loading only the most recent N chats. The 24-hour cache ensures subsequent runs are instant.
+
+## Features
+
+### Performance Optimizations
+- **Chat list caching**: 24-hour local cache makes repeated runs instant
+- **Parallel exports**: When using `--all`, exports multiple chats concurrently (up to 3 at once)
+- **Automatic retry**: Handles API rate limiting (429) and server errors (5xx) with exponential backoff
+- **Optimized pagination**: Fetches 50 messages per request (Graph API maximum)
+- **Smart filtering**: Stops fetching when messages are outside the date range
+
+### User Experience Improvements
+- **Interactive chat selection**: Beautiful menu with chat names, types, and last activity
+- **Multiple match handling**: If search finds multiple chats, shows menu instead of error
+- **Markdown format**: Standard Markdown output that works in Jira, GitHub, Confluence, and other platforms
+  - Clean HTML conversion (removes tags, preserves formatting)
+  - Blockquote formatting (`>`) for message content
+  - Standard Markdown headers (`##`, `###`) and emphasis (`**bold**`, `*italic*`)
+  - Attachment support with clickable links
+  - **Image support**: Images from chat attachments rendered as `![name](url)`
+  - Reaction indicators
+  - Proper timestamp formatting
+- **Smart defaults**: Defaults to today's date if not specified
+- **Progress tracking**: Shows real-time progress for multi-chat exports
 
 ## Limitations
 
 - Requires delegated permissions for the signed-in user.
 - Attachments are referenced in the output but not downloaded.
-- Microsoft Graph API throttling is not yet handled with automatic retries.
+- Parallel exports limited to 3 concurrent requests to avoid API throttling.
 
 ## Security Notes
 
