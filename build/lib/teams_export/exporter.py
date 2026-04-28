@@ -4,22 +4,15 @@ import csv
 import json
 import re
 from pathlib import Path
-<<<<<<< Updated upstream
-from typing import Iterable, List, Sequence
-=======
 from typing import Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
->>>>>>> Stashed changes
 
 from dateutil import parser
 
 from .graph import GraphClient
-<<<<<<< Updated upstream
-=======
 from .formatters import write_jira_markdown, write_html, write_docx
 from .delta import DeltaStateManager
->>>>>>> Stashed changes
 
 
 class ChatNotFoundError(RuntimeError):
@@ -47,8 +40,13 @@ def choose_chat(
     *,
     participant: str | None = None,
     chat_name: str | None = None,
-) -> dict:
-    """Select a chat by participant identifier or chat display name."""
+) -> dict | List[dict]:
+    """Select a chat by participant identifier or chat display name.
+
+    Returns:
+        Either a single chat dict if exactly one match, or a list of matches
+        if multiple chats matched the criteria.
+    """
 
     name_norm = _normalise(chat_name) if chat_name else None
     participant_norm = _normalise(participant) if participant else None
@@ -75,12 +73,11 @@ def choose_chat(
             "No chat matches the provided identifiers. Try running with --list to"
             " review available chats."
         )
-    if len(matches) > 1:
-        ids = ", ".join(chat.get("id", "?") for chat in matches)
-        raise ChatNotFoundError(
-            f"Multiple chats matched the request. Narrow your query. Matches: {ids}"
-        )
-    return matches[0]
+    if len(matches) == 1:
+        return matches[0]
+
+    # Return all matches for interactive selection
+    return matches
 
 
 def _normalise_filename(identifier: str) -> str:
@@ -89,8 +86,9 @@ def _normalise_filename(identifier: str) -> str:
 
 
 def _transform_message(message: dict) -> dict:
-    sender_info = message.get("from", {}).get("user", {})
-    sender_fallback = message.get("from", {}).get("application", {})
+    from_field = message.get("from") or {}
+    sender_info = from_field.get("user") or {}
+    sender_fallback = from_field.get("application") or {}
     sender_display = sender_info.get("displayName") or sender_fallback.get("displayName")
     sender_email = sender_info.get("userPrincipalName") or sender_info.get("email")
 
@@ -141,8 +139,6 @@ def _write_csv(messages: Sequence[dict], output_path: Path) -> None:
             writer.writerow({key: message.get(key) for key in fieldnames})
 
 
-<<<<<<< Updated upstream
-=======
 def _get_extension_from_mime(mime_type: str) -> str:
     """Get file extension from MIME type."""
     mime_to_ext = {
@@ -578,7 +574,6 @@ def _download_all_attachments_parallel(  # pragma: no cover - network + thread h
     return url_mapping
 
 
->>>>>>> Stashed changes
 def export_chat(
     client: GraphClient,
     chat: dict,
@@ -587,12 +582,9 @@ def export_chat(
     *,
     output_dir: Path,
     output_format: str = "json",
-<<<<<<< Updated upstream
-=======
     download_attachments: bool = True,
     download_all_types: bool = False,
     use_parallel_fetch: bool = True,
->>>>>>> Stashed changes
 ) -> tuple[Path, int]:
     chat_id = chat.get("id")
     if not chat_id:
@@ -604,7 +596,20 @@ def export_chat(
         identifier = members[0] if members else chat_id
     filename_stem = _normalise_filename(identifier)
     output_dir.mkdir(parents=True, exist_ok=True)
-    suffix = output_format.lower()
+
+    # Normalize format and determine extension
+    fmt = output_format.lower()
+    if fmt in ("jira", "jira-markdown", "markdown"):
+        suffix = "md"
+        fmt = "jira"
+    elif fmt == "html":
+        suffix = "html"
+    elif fmt in ("docx", "word"):
+        suffix = "docx"
+        fmt = "docx"
+    else:
+        suffix = fmt
+
     if start_dt.date() == end_dt.date():
         date_fragment = start_dt.date().isoformat()
     else:
@@ -632,12 +637,15 @@ def export_chat(
     else:
         raw_messages = client.list_chat_messages(chat_id, stop_condition=_stop_condition)
     filtered_messages = [m for m in raw_messages if _within_range(m, start_dt, end_dt)]
+
+    # Sort messages from oldest to newest (Graph API returns newest first)
+    filtered_messages.sort(
+        key=lambda m: m.get("createdDateTime") or m.get("lastModifiedDateTime") or ""
+    )
+
     messages = [_transform_message(m) for m in filtered_messages]
     message_count = len(messages)
 
-<<<<<<< Updated upstream
-    if output_format.lower() == "json":
-=======
     # Download attachments if requested (only for formats that support it)
     url_mapping = {}
     attachments_dir = None
@@ -654,12 +662,41 @@ def export_chat(
             url_mapping = _download_attachments_parallel(client, messages, attachments_dir, max_workers=5)
 
     if fmt == "json":
->>>>>>> Stashed changes
         _write_json(messages, output_path)
-    elif output_format.lower() == "csv":
+    elif fmt == "csv":
         _write_csv(messages, output_path)
+    elif fmt == "jira":
+        # Prepare chat metadata for Jira formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_jira_markdown(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
+    elif fmt == "html":
+        # Prepare chat metadata for HTML formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_html(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
+    elif fmt == "docx":
+        # Prepare chat metadata for Word document formatter
+        chat_title = chat.get("topic") or chat.get("displayName") or identifier
+        participants_list = _member_labels(chat)
+        chat_info = {
+            "title": chat_title,
+            "participants": ", ".join(participants_list) if participants_list else "N/A",
+            "date_range": f"{start_dt.date()} to {end_dt.date()}",
+        }
+        write_docx(messages, output_path, chat_info=chat_info, url_mapping=url_mapping)
     else:
-        raise ValueError("Unsupported export format. Choose json or csv.")
+        raise ValueError("Unsupported export format. Choose json, csv, jira, html, or docx.")
 
     return output_path, message_count
 

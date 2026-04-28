@@ -1,0 +1,25 @@
+# Teams Export – Priority TODOs
+
+These are the most impactful functionality and performance gaps observed on 2025-11-09. Items are grouped by urgency; each should be solvable in roughly 1–2 days and references the primary modules involved.
+
+## High Priority
+
+- **Incremental Exports & Delta Sync (`src/teams_export/exporter.py`, `src/teams_export/graph.py`, `src/teams_export/cache.py`)**: Every run re-fetches entire chats and filters client-side, even when exporting the same conversation daily. Persist per-chat delta tokens / last-message timestamps and add an `--incremental` flag so we only pull new/changed messages via Graph `/delta` endpoints, updating a lightweight cache under `~/.teams-exporter/delta/`. **Next step:** Design a small state file keyed by chat ID + format, implement token storage, and update `export_chat()` to short-circuit once delta queries report no changes.
+- **Faster Message Pagination & Attachment Downloads (`src/teams_export/graph.py`, `src/teams_export/exporter.py`)**: Large chats require hundreds of sequential HTTP calls (50 msgs/page) and attachments are downloaded one-by-one, so exports can take minutes. Introduce asynchronous pagination (e.g., `aiohttp` or ThreadPoolExecutor with bounded concurrency) and batch attachment downloads with retry/backoff to keep throughput high without tripping Graph limits. **Next step:** Refactor `GraphClient.list_chat_messages()` behind an interface that can fetch multiple pages concurrently, and wrap `_download_attachments()` in a worker pool with per-domain rate limiting + progress logging.
+- **Comprehensive Attachment Handling (`src/teams_export/exporter.py`, `README.md`)**: `_extract_image_urls()` only grabs image links even though Teams messages often carry PDFs, Office docs, and `hostedContents` blobs. This also contradicts README claims about downloadable attachments. **Next step:** Expand attachment parsing to include all Graph `attachments` payloads (file, reference, hosted content), stream them to disk with safe names, and document the behavior and new `--download-all-attachments/--no-download-attachments` toggle.
+- **Baseline Test Suite (`src/teams_export/dates.py`, `src/teams_export/config.py`, `src/teams_export/exporter.py`)**: There is no `tests/` folder, so changes to date parsing, config resolution, or message transforms risk silent regressions. **Next step:** Stand up `pytest` with fixtures that mock Graph responses; cover `resolve_range()`, config loading/validation, `_transform_message()`, and attachment URL mapping to reach ≥60% coverage before deeper refactors.
+
+## Medium Priority
+
+- **Message-Level Filters (`src/teams_export/cli.py`, `src/teams_export/exporter.py`)**: Users can filter by participant/chat but not by sender, keyword, or reaction, forcing manual triage of huge exports. Add CLI flags like `--sender`, `--contains`, and `--has-reaction` that filter post-fetch (or via Graph `$filter` when available) and annotate matches in Markdown/HTML output. **Next step:** Extend the Typer options, thread filter criteria into `export_chat()`, and update formatters to optionally highlight matched text.
+- **Richer Progress & Telemetry (`src/teams_export/cli.py`, `src/teams_export/graph.py`)**: Long-running steps only print "Loading chats…" or raw counters, offering no ETA or rate-limit insight. Leverage the existing progress callbacks plus a library like `rich` to display chat/message progress, retry counts, and attachment throughput. **Next step:** Replace manual `print` statements with structured progress components and log retries/HTTP 429s so operators can spot throttling.
+- **Smarter Chat Cache Refresh (`src/teams_export/cache.py`, `src/teams_export/cli.py`)**: Cache invalidation is a blunt 24h TTL keyed only on the literal string "me". Tie cache keys to the actual user/tenant from the token and store `lastUpdatedDateTime` per chat so refreshes can request only chats changed since the last sync. **Next step:** Persist metadata alongside chat lists, add CLI options to force delta refresh, and fall back gracefully when metadata is missing.
+
+## Low Priority
+
+- **Modularize Formatters (`src/teams_export/formatters.py`)**: The 700+ line monolith mixes markdown, HTML, and DOCX concerns with duplicated styling logic, slowing feature work. Split into a `formatters/` package (`jira.py`, `html.py`, `docx.py`, `common.py`) with shared utilities for image embedding and reaction rendering. **Next step:** Introduce the package, update imports, and ensure existing CLI options continue to resolve formats by string.
+- **Organize Bulk Export Output (`src/teams_export/exporter.py`)**: When `--all` exports multiple chats, every file lands flat in `exports/`, making it tough to correlate attachments. Create per-chat subdirectories (e.g., `exports/<slug>/<date>/…`) so Markdown files and `_files` folders stay grouped. **Next step:** Detect multi-chat runs and adjust output paths while preserving backward compatibility for single exports via a CLI flag or config switch.
+
+---
+
+Track progress by checking items off here as they land. Update timestamps or add new sections when priorities shift.
